@@ -1,0 +1,16 @@
+{
+  "adminPassword": "admin",
+  "enforceLocalOnly": true,
+  "port": 3000,
+  "sharedFolders": [
+    {
+      "id": "uploads-default",
+      "name": "Folder Upload Publik",
+      "path": "D:\\sftp-apps\\uploads",
+      "allowUpload": true,
+      "allowDownload": true,
+      "requiresOtp": false,
+      "otp": ""
+    }
+  ]
+}

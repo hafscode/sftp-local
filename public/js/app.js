@@ -103,20 +103,33 @@ function setupEventListeners() {
   });
 
   // Action Toolbar Upload Buttons
+  const fileInputFiles = document.getElementById('file-input-files');
+  const fileInputFolder = document.getElementById('file-input-folder');
+
   document.getElementById('btn-upload-file').addEventListener('click', () => {
-    document.getElementById('file-input-files').click();
+    if (fileInputFiles) fileInputFiles.value = '';
+    fileInputFiles.click();
   });
 
   document.getElementById('btn-upload-folder').addEventListener('click', () => {
-    document.getElementById('file-input-folder').click();
+    if (fileInputFolder) fileInputFolder.value = '';
+    fileInputFolder.click();
   });
 
-  document.getElementById('file-input-files').addEventListener('change', (e) => {
-    if (e.target.files.length > 0) uploadFiles(e.target.files);
+  fileInputFiles.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      e.target.value = '';
+      handleFileSelection(files);
+    }
   });
 
-  document.getElementById('file-input-folder').addEventListener('change', (e) => {
-    if (e.target.files.length > 0) uploadFiles(e.target.files);
+  fileInputFolder.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      e.target.value = '';
+      handleFileSelection(files);
+    }
   });
 
   // Floating Upload Widget Button Handler
@@ -175,7 +188,7 @@ function setupEventListeners() {
     e.preventDefault();
     dragOverlay.classList.remove('active');
     if (e.dataTransfer.files.length > 0) {
-      uploadFiles(e.dataTransfer.files);
+      handleFileSelection(e.dataTransfer.files);
     }
   });
 }
@@ -658,7 +671,56 @@ async function createSubfolder(newFolderName) {
   }
 }
 
-function uploadFiles(files) {
+async function handleFileSelection(files) {
+  if (!currentFolderId || !files || files.length === 0) return;
+
+  const filesArray = Array.from(files);
+  const filenames = filesArray.map(f => f.webkitRelativePath || f.name);
+
+  try {
+    const res = await fetch(`/api/folders/${currentFolderId}/check-exists?subpath=${encodeURIComponent(currentSubpath)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filenames })
+    });
+    const data = await res.json();
+
+    if (data.existing && data.existing.length > 0) {
+      // Show conflict modal
+      const conflictListEl = document.getElementById('conflict-file-list');
+      if (conflictListEl) {
+        conflictListEl.innerHTML = data.existing.map(f => `<div>📄 <strong>${escapeHtml(f)}</strong></div>`).join('');
+      }
+
+      const btnRename = document.getElementById('btn-conflict-rename');
+      const btnReplace = document.getElementById('btn-conflict-replace');
+
+      if (btnRename) {
+        btnRename.onclick = () => {
+          closeModal('modal-upload-conflict');
+          uploadFiles(filesArray, 'rename');
+        };
+      }
+
+      if (btnReplace) {
+        btnReplace.onclick = () => {
+          closeModal('modal-upload-conflict');
+          uploadFiles(filesArray, 'replace');
+        };
+      }
+
+      openModal('modal-upload-conflict');
+    } else {
+      // No duplicate files, proceed to upload directly
+      uploadFiles(filesArray, 'replace');
+    }
+  } catch (err) {
+    console.error('Error checking existing files:', err);
+    uploadFiles(filesArray, 'replace');
+  }
+}
+
+function uploadFiles(files, conflictAction = 'replace') {
   if (!currentFolderId || !files || files.length === 0) return;
 
   isUploadCompleted = false;
@@ -729,7 +791,7 @@ function uploadFiles(files) {
   }
 
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', `/api/folders/${currentFolderId}/upload?subpath=${encodeURIComponent(currentSubpath)}`);
+  xhr.open('POST', `/api/folders/${currentFolderId}/upload?subpath=${encodeURIComponent(currentSubpath)}&action=${encodeURIComponent(conflictAction)}`);
 
   // XHR Progress Handler
   xhr.upload.onprogress = (e) => {

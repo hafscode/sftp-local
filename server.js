@@ -149,6 +149,21 @@ function getSafePath(baseFolderPath, subPath = '') {
   return targetPath;
 }
 
+function getUniqueFilename(destDir, originalName) {
+  const filename = path.basename(originalName);
+  const ext = path.extname(filename);
+  const nameWithoutExt = path.basename(filename, ext);
+
+  let candidate = filename;
+  let counter = 1;
+
+  while (fs.existsSync(path.join(destDir, candidate))) {
+    candidate = `${nameWithoutExt} (${counter})${ext}`;
+    counter++;
+  }
+  return candidate;
+}
+
 // Multer storage engine
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -183,8 +198,30 @@ const storage = multer.diskStorage({
     }
   },
   filename: function (req, file, cb) {
-    const filename = path.basename(file.originalname);
-    cb(null, filename);
+    try {
+      const folderId = req.params.id;
+      const sharedFolder = config.sharedFolders.find(f => f.id === folderId);
+      const relativePath = req.query.subpath || '';
+      let fileSubDir = '';
+      if (req.body && req.body.relativePath) {
+        fileSubDir = path.dirname(req.body.relativePath);
+      } else if (file.originalname && file.originalname.includes('/')) {
+        fileSubDir = path.dirname(file.originalname);
+      }
+
+      const fullDest = getSafePath(sharedFolder ? sharedFolder.path : __dirname, path.join(relativePath, fileSubDir));
+      const originalBasename = path.basename(file.originalname);
+      const conflictAction = req.query.action || 'replace';
+
+      if (conflictAction === 'rename') {
+        const uniqueName = getUniqueFilename(fullDest, originalBasename);
+        cb(null, uniqueName);
+      } else {
+        cb(null, originalBasename);
+      }
+    } catch (err) {
+      cb(err);
+    }
   }
 });
 
@@ -498,6 +535,36 @@ app.get('/api/folders/:id/download-zip', (req, res) => {
     archive.finalize();
   } catch (err) {
     res.status(400).send(err.message);
+  }
+});
+
+// Check if file(s) exist in destination folder before uploading
+app.post('/api/folders/:id/check-exists', (req, res) => {
+  const folderId = req.params.id;
+  const subpath = req.query.subpath || '';
+  const { filenames } = req.body;
+  const folder = config.sharedFolders.find(f => f.id === folderId);
+
+  if (!folder) return res.status(404).json({ error: 'Folder tidak ditemukan' });
+  if (folder.requiresOtp && !req.session.verifiedFolders[folderId]) {
+    return res.status(401).json({ error: 'OTP diperlukan' });
+  }
+
+  if (!filenames || !Array.isArray(filenames)) {
+    return res.json({ existing: [] });
+  }
+
+  const existing = [];
+  try {
+    filenames.forEach(relFile => {
+      const targetFilePath = getSafePath(folder.path, path.join(subpath, relFile));
+      if (fs.existsSync(targetFilePath) && !fs.statSync(targetFilePath).isDirectory()) {
+        existing.push(relFile);
+      }
+    });
+    res.json({ existing });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

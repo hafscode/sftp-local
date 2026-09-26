@@ -178,6 +178,34 @@
         <button class="btn-icon" onclick="closeModal('modal-upload-detail')">Tutup</button>
       </div>
     </div>
+  <!-- UPLOAD CONFLICT / DUPLICATE FILE MODAL -->
+  <div class="modal-overlay" id="modal-upload-conflict">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" style="color: var(--win-warning);">⚠️ Berkas Sudah Ada di Folder</h3>
+        <button class="close-btn" onclick="closeModal('modal-upload-conflict')">&times;</button>
+      </div>
+      
+      <p style="font-size: 0.85rem; color: var(--win-text-muted); margin-bottom: 0.6rem;">
+        Berkas berikut sudah terdapat di dalam folder tujuan. Pilih tindakan pengunggahan:
+      </p>
+
+      <div id="conflict-file-list" style="max-height: 140px; overflow-y: auto; background: var(--win-bg); border: 1px solid var(--win-border); border-radius: 6px; padding: 0.5rem; margin-bottom: 1.25rem; font-size: 0.8rem; color: var(--win-text);">
+        <!-- Duplicate file names listed here -->
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        <button class="btn-icon" id="btn-conflict-rename" style="background: var(--win-accent-dark); color: #fff; justify-content: center; font-weight: 600; padding: 0.6rem;">
+          ✏️ Simpan Keduanya (Tambah (1) di nama berkas)
+        </button>
+        <button class="btn-icon" id="btn-conflict-replace" style="background: var(--win-card); border-color: var(--win-warning); color: var(--win-warning); justify-content: center; font-weight: 600; padding: 0.6rem;">
+          🔄 Timpa Berkas yang Sudah Ada (Replace)
+        </button>
+        <button class="btn-icon" onclick="closeModal('modal-upload-conflict')" style="justify-content: center; padding: 0.5rem; color: var(--win-text-muted);">
+          ❌ Batal Pengunggahan
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- OTP MODAL -->

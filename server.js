@@ -649,6 +649,41 @@ app.delete('/api/folders/:id/delete', (req, res) => {
   }
 });
 
+// Rename File or Folder
+app.post('/api/folders/:id/rename', (req, res) => {
+  const folderId = req.params.id;
+  const { subpath, newName } = req.body;
+  const folder = config.sharedFolders.find(f => f.id === folderId);
+
+  if (!folder) return res.status(404).json({ error: 'Folder tidak ditemukan' });
+  if (!folder.allowUpload) return res.status(403).json({ error: 'Perubahan nama tidak diizinkan di folder ini' });
+  if (folder.requiresOtp && !req.session.verifiedFolders[folderId]) {
+    return res.status(401).json({ error: 'OTP diperlukan' });
+  }
+
+  if (!subpath || !newName || !newName.trim()) {
+    return res.status(400).json({ error: 'Nama baru tidak boleh kosong' });
+  }
+
+  try {
+    const oldPath = getSafePath(folder.path, subpath);
+    if (!fs.existsSync(oldPath)) return res.status(404).json({ error: 'File atau folder tidak ditemukan' });
+
+    const parentDir = path.dirname(oldPath);
+    const sanitizedNewName = path.basename(newName.trim());
+    const newPath = getSafePath(folder.path, path.relative(folder.path, path.join(parentDir, sanitizedNewName)));
+
+    if (fs.existsSync(newPath)) {
+      return res.status(400).json({ error: `File atau folder dengan nama "${sanitizedNewName}" sudah ada` });
+    }
+
+    fs.renameSync(oldPath, newPath);
+    res.json({ success: true, message: 'Nama berhasil diubah' });
+  } catch (err) {
+    res.status(400).json({ error: 'Gagal mengubah nama: ' + err.message });
+  }
+});
+
 
 // ------------------- ADMIN APIS -------------------
 

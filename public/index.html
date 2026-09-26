@@ -254,6 +254,27 @@
     </div>
   </div>
 
+  <!-- RENAME ITEM MODAL -->
+  <div class="modal-overlay" id="modal-rename">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">✏️ Ubah Nama (Rename)</h3>
+        <button class="close-btn" onclick="closeModal('modal-rename')">&times;</button>
+      </div>
+      <form id="form-rename">
+        <input type="hidden" id="rename-old-subpath">
+        <div class="form-group">
+          <label for="rename-input-name">Nama Baru</label>
+          <input type="text" id="rename-input-name" class="form-control" placeholder="Masukkan nama baru..." required>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem;">
+          <button type="button" class="btn-icon" onclick="closeModal('modal-rename')">Batal</button>
+          <button type="submit" class="btn-icon" style="background: var(--win-accent-dark);">Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- QR CODE CONNECT MODAL -->
   <div class="modal-overlay" id="modal-qr">
     <div class="modal-card" style="text-align: center;">

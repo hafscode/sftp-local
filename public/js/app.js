@@ -176,6 +176,16 @@ function setupEventListeners() {
     await createSubfolder(newName);
   });
 
+  const formRename = document.getElementById('form-rename');
+  if (formRename) {
+    formRename.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const oldSubpath = document.getElementById('rename-old-subpath').value;
+      const newName = document.getElementById('rename-input-name').value;
+      await renameItem(oldSubpath, newName);
+    });
+  }
+
   // Drag and Drop files onto Main Content Area
   const mainContent = document.getElementById('main-content');
   const dragOverlay = document.getElementById('drag-overlay');
@@ -518,12 +528,14 @@ function renderFileTable(items) {
     let actionBtns = '';
     if (item.isDirectory) {
       actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}', true)">Buka 📂</button>`;
+      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); promptRename('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}')">Edit ✏️</button>`;
       actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); shareLink('${escapeJsStr(itemSubpath)}', true)">Share 🔗</button>`;
       actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); downloadZip('${escapeJsStr(itemSubpath)}')">.ZIP 📦</button>`;
     } else {
       if (canPreview(item.extension)) {
         actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); previewFile('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}', '${item.extension}')">Lihat 👁️</button>`;
       }
+      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); promptRename('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}')">Edit ✏️</button>`;
       actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); shareLink('${escapeJsStr(itemSubpath)}', false)">Share 🔗</button>`;
       actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); downloadFile('${escapeJsStr(itemSubpath)}')">Unduh ⬇️</button>`;
     }
@@ -672,6 +684,50 @@ async function createSubfolder(newFolderName) {
       await buildSidebarFolderTree(currentFolderId);
     } else {
       alert('Gagal membuat folder: ' + data.error);
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+function promptRename(subpath, currentName) {
+  const oldSubpathInput = document.getElementById('rename-old-subpath');
+  const renameInput = document.getElementById('rename-input-name');
+  if (oldSubpathInput && renameInput) {
+    oldSubpathInput.value = subpath;
+    renameInput.value = currentName;
+    openModal('modal-rename');
+    setTimeout(() => {
+      renameInput.focus();
+      const dotIndex = currentName.lastIndexOf('.');
+      if (dotIndex > 0) {
+        renameInput.setSelectionRange(0, dotIndex);
+      } else {
+        renameInput.select();
+      }
+    }, 100);
+  }
+}
+
+async function renameItem(oldSubpath, newName) {
+  if (!currentFolderId || !newName || !newName.trim()) return;
+
+  try {
+    const res = await fetch(`/api/folders/${currentFolderId}/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subpath: oldSubpath,
+        newName: newName.trim()
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      closeModal('modal-rename');
+      await loadFolderContents(currentFolderId, currentSubpath, false);
+      await buildSidebarFolderTree(currentFolderId);
+    } else {
+      alert('Gagal mengubah nama: ' + data.error);
     }
   } catch (err) {
     alert('Error: ' + err.message);

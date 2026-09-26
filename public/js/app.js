@@ -917,8 +917,7 @@ function getFileTypeName(item) {
 }
 
 function canPreview(ext) {
-  const mediaExts = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.mp4', '.webm', '.mp3', '.wav', '.pdf', '.txt', '.json', '.md'];
-  return mediaExts.includes((ext || '').toLowerCase());
+  return true; // Enable preview button for all file formats (direct media, text, or file info preview card)
 }
 
 // Share original physical file binary directly via Web Share API Level 2 (WhatsApp/System share)
@@ -1040,8 +1039,11 @@ function shareLink(subpath, isDirectory = false, filename = '') {
 
 function previewFile(subpath, filename, ext) {
   const container = document.getElementById('preview-container');
+  if (!container) return;
   container.innerHTML = '';
-  document.getElementById('preview-filename').innerText = filename;
+
+  const titleEl = document.getElementById('preview-filename');
+  if (titleEl) titleEl.innerText = filename;
 
   // Bind download & share buttons inside modal
   const btnDownloadModal = document.getElementById('btn-modal-download');
@@ -1051,26 +1053,32 @@ function previewFile(subpath, filename, ext) {
 
   const btnShareModal = document.getElementById('btn-modal-share');
   if (btnShareModal) {
-    btnShareModal.onclick = () => shareLink(subpath, false);
+    btnShareModal.onclick = () => shareLink(subpath, false, filename);
   }
 
   const fileUrl = `/api/folders/${currentFolderId}/file?subpath=${encodeURIComponent(subpath)}&preview=1`;
   const lowerExt = (ext || '').toLowerCase();
 
-  if (['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp'].includes(lowerExt)) {
-    container.innerHTML = `<img src="${fileUrl}" alt="${escapeHtml(filename)}">`;
-  } else if (['.mp4', '.webm'].includes(lowerExt)) {
-    container.innerHTML = `<video src="${fileUrl}" controls autoplay></video>`;
-  } else if (['.mp3', '.wav'].includes(lowerExt)) {
-    container.innerHTML = `<audio src="${fileUrl}" controls autoplay></audio>`;
+  if (['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.bmp', '.ico'].includes(lowerExt)) {
+    container.innerHTML = `<img src="${fileUrl}" alt="${escapeHtml(filename)}" style="max-width:100%; max-height:65vh; border-radius:4px;">`;
+  } else if (['.mp4', '.webm', '.mkv', '.avi', '.mov', '.ogg', '.3gp'].includes(lowerExt)) {
+    container.innerHTML = `<video src="${fileUrl}" controls autoplay style="max-width:100%; max-height:65vh; border-radius:4px;"></video>`;
+  } else if (['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac'].includes(lowerExt)) {
+    container.innerHTML = `<audio src="${fileUrl}" controls autoplay style="width:100%; margin:2rem 0;"></audio>`;
   } else if (lowerExt === '.pdf') {
-    container.innerHTML = `<iframe src="${fileUrl}"></iframe>`;
-  } else if (['.txt', '.json', '.md', '.js', '.html', '.css', '.py', '.sh', '.bat', '.cmd', '.xml', '.yaml', '.yml'].includes(lowerExt)) {
+    container.innerHTML = `<iframe src="${fileUrl}" style="width:100%; height:60vh; border:none; border-radius:4px;"></iframe>`;
+  } else if (['.txt', '.json', '.md', '.js', '.html', '.css', '.py', '.sh', '.bat', '.cmd', '.xml', '.yaml', '.yml', '.csv', '.log', '.env', '.ini', '.sql', '.php', '.java', '.c', '.cpp', '.h', '.ts', '.jsx', '.tsx'].includes(lowerExt)) {
     container.innerHTML = `<p style="color:var(--win-text-muted)">Memuat isi teks...</p>`;
     fetch(fileUrl)
-      .then(res => res.text())
+      .then(res => {
+        if (!res.ok) throw new Error('Gagal memuat berkas');
+        return res.text();
+      })
       .then(text => {
         container.innerHTML = `<pre style="background:var(--win-bg); padding:1rem; border-radius:4px; width:100%; max-height:60vh; overflow:auto; font-family:monospace; font-size:0.85rem; white-space:pre-wrap; word-break:break-all;">${escapeHtml(text)}</pre>`;
+      })
+      .catch(err => {
+        container.innerHTML = `<p style="color:var(--win-danger)">Terjadi kesalahan saat memuat isi teks berkas.</p>`;
       });
   } else {
     // Non-direct media preview fallback card inside modal
@@ -1078,9 +1086,9 @@ function previewFile(subpath, filename, ext) {
       <div style="text-align: center; padding: 2rem 1rem;">
         <div style="font-size: 3.5rem; margin-bottom: 0.75rem;">📄</div>
         <h4 style="margin-bottom: 0.5rem; font-weight: 600;">${escapeHtml(filename)}</h4>
-        <p style="color: var(--win-text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">File ini tidak dapat ditampilkan sebagai pratinjau media langsung.</p>
+        <p style="color: var(--win-text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">Pratinjau langsung tidak tersedia untuk format berkas ini.</p>
         <div style="display: flex; gap: 0.5rem; justify-content: center;">
-          <button class="btn-icon" style="background: var(--win-card); border-color: var(--win-border); padding: 0.6rem 1.25rem; font-size: 0.95rem;" onclick="shareLink('${escapeJsStr(subpath)}', false)">
+          <button class="btn-icon" style="background: var(--win-card); border-color: var(--win-border); padding: 0.6rem 1.25rem; font-size: 0.95rem;" onclick="shareLink('${escapeJsStr(subpath)}', false, '${escapeJsStr(filename)}')">
             🔗 Share Link
           </button>
           <button class="btn-icon" style="background: var(--win-accent-dark); color: #fff; padding: 0.6rem 1.25rem; font-size: 0.95rem;" onclick="downloadFile('${escapeJsStr(subpath)}')">

@@ -387,6 +387,11 @@ header {
   vertical-align: middle;
 }
 
+.details-table td.col-actions {
+  overflow: visible !important;
+  position: relative;
+}
+
 .details-table tr:hover {
   background: var(--win-hover);
 }
@@ -414,6 +419,63 @@ header {
 .row-actions {
   display: flex;
   gap: 0.35rem;
+  align-items: center;
+}
+
+/* ACTION DROPDOWN MENU */
+.action-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.action-dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: var(--win-surface);
+  border: 1px solid var(--win-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+  padding: 0.35rem;
+  z-index: 999;
+  min-width: 130px;
+  display: none;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.action-dropdown-menu.active {
+  display: flex !important;
+}
+
+.dropdown-item {
+  background: transparent;
+  border: none;
+  color: var(--win-text);
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  white-space: nowrap;
+  transition: background 0.12s ease;
+}
+
+.dropdown-item:hover {
+  background: var(--win-hover);
+}
+
+.dropdown-item.danger {
+  color: var(--win-danger);
+}
+
+.dropdown-item.danger:hover {
+  background: rgba(239, 68, 68, 0.15);
 }
 
 /* STATUS BAR AT BOTTOM */

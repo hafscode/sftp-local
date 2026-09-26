@@ -206,6 +206,43 @@ function setupEventListeners() {
       handleFileSelection(e.dataTransfer.files);
     }
   });
+
+  // Close row action dropdown menus when clicking anywhere outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.action-dropdown-container')) {
+      closeAllRowMenus();
+    }
+  });
+}
+
+// Row Action Dropdown Menu Helpers
+function toggleRowMenu(btn) {
+  const menu = btn.nextElementSibling;
+  if (!menu) return;
+  const isAlreadyActive = menu.classList.contains('active');
+  closeAllRowMenus();
+
+  if (!isAlreadyActive) {
+    menu.classList.add('active');
+    const rect = menu.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight - 10) {
+      menu.style.top = 'auto';
+      menu.style.bottom = '100%';
+      menu.style.marginTop = '0';
+      menu.style.marginBottom = '4px';
+    } else {
+      menu.style.top = '100%';
+      menu.style.bottom = 'auto';
+      menu.style.marginTop = '4px';
+      menu.style.marginBottom = '0';
+    }
+  }
+}
+
+function closeAllRowMenus() {
+  document.querySelectorAll('.action-dropdown-menu.active').forEach(menu => {
+    menu.classList.remove('active');
+  });
 }
 
 // System LAN Info
@@ -526,20 +563,29 @@ function renderFileTable(items) {
     const dateText = item.mtime ? new Date(item.mtime).toLocaleString('id-ID') : '-';
 
     let actionBtns = '';
+    // 1. Edit Button (always visible)
+    actionBtns += `<button class="btn-icon" title="Edit / Rename" onclick="event.stopPropagation(); promptRename('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}')">✏️</button>`;
+
+    // 2. Download Button (always visible)
     if (item.isDirectory) {
-      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}', true)">Buka 📂</button>`;
-      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); promptRename('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}')">Edit ✏️</button>`;
-      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); shareLink('${escapeJsStr(itemSubpath)}', true)">Share 🔗</button>`;
-      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); downloadZip('${escapeJsStr(itemSubpath)}')">.ZIP 📦</button>`;
+      actionBtns += `<button class="btn-icon" title="Unduh .ZIP" onclick="event.stopPropagation(); downloadZip('${escapeJsStr(itemSubpath)}')">📦</button>`;
     } else {
-      if (canPreview(item.extension)) {
-        actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); previewFile('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}', '${item.extension}')">Lihat 👁️</button>`;
-      }
-      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); promptRename('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}')">Edit ✏️</button>`;
-      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); shareLink('${escapeJsStr(itemSubpath)}', false)">Share 🔗</button>`;
-      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); downloadFile('${escapeJsStr(itemSubpath)}')">Unduh ⬇️</button>`;
+      actionBtns += `<button class="btn-icon" title="Unduh Berkas" onclick="event.stopPropagation(); downloadFile('${escapeJsStr(itemSubpath)}')">⬇️</button>`;
     }
-    actionBtns += `<button class="btn-icon" style="color:var(--win-danger);" onclick="event.stopPropagation(); deleteItem('${escapeJsStr(itemSubpath)}')">🗑️</button>`;
+
+    // 3. More Options Dropdown Button (Lihat, Share, Delete)
+    actionBtns += `
+      <div class="action-dropdown-container">
+        <button class="btn-icon btn-more" title="Opsi Lainnya" onclick="event.stopPropagation(); toggleRowMenu(this)">⋮</button>
+        <div class="action-dropdown-menu">
+          ${item.isDirectory 
+            ? `<button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}', true)">📂 Buka</button>` 
+            : `<button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); previewFile('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}', '${item.extension}')">👁️ Lihat</button>`}
+          <button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); shareLink('${escapeJsStr(itemSubpath)}', ${item.isDirectory ? 'true' : 'false'})">🔗 Share</button>
+          <button class="dropdown-item danger" onclick="event.stopPropagation(); closeAllRowMenus(); deleteItem('${escapeJsStr(itemSubpath)}')">🗑️ Hapus</button>
+        </div>
+      </div>
+    `;
 
     tr.innerHTML = `
       <td class="col-name">

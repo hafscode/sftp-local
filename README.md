@@ -84,7 +84,20 @@ Akses Jaringan Wi-Fi/Intranet (Ethernet): http://192.168.30.111:3000
 
 ---
 
-### **Langkah 2: Mengakses Aplikasi di Berbagai Perangkat**
+### **Langkah 2: Mengecek Status Server Running / Offline**
+Untuk memeriksa apakah server sedang berjalan atau mati:
+* **Windows Batch**:
+  ```cmd
+  script-check.bat
+  ```
+* **Git Bash / Linux**:
+  ```bash
+  ./script-check.sh
+  ```
+
+---
+
+### **Langkah 3: Mengakses Aplikasi di Berbagai Perangkat**
 
 #### **A. Dari Komputer Server Sendiri**
 Buka browser di komputer server dan akses:
@@ -99,7 +112,7 @@ Buka browser di komputer server dan akses:
 
 ---
 
-### **Langkah 3: Mematikan Server (Shutdown Script)**
+### **Langkah 4: Mematikan Server (Shutdown Script)**
 Untuk menghentikan server yang sedang berjalan di port 3000:
 * **Windows Batch**:
   ```cmd
@@ -165,6 +178,8 @@ sftp-local/
 ├── package.json            # Daftar dependensi modul npm
 ├── script-run.sh           # Skrip start untuk Bash/Linux
 ├── script-run.bat          # Skrip start untuk Windows CMD
+├── script-check.sh         # Skrip pengecekan status server untuk Bash/Linux
+├── script-check.bat        # Skrip pengecekan status server untuk Windows CMD
 ├── script-shutdown.sh      # Skrip mematikan server untuk Bash/Linux
 ├── script-shutdown.bat     # Skrip mematikan server untuk Windows CMD
 ├── run-background.vbs      # Silent background launcher untuk Windows AutoStart

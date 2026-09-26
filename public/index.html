@@ -203,12 +203,17 @@
     </div>
   </div>
 
-  <!-- FILE PREVIEW MODAL -->
+  <!-- FILE PREVIEW MODAL WITH DOWNLOAD BUTTON -->
   <div class="modal-overlay" id="modal-preview">
     <div class="modal-card preview-card">
       <div class="modal-header">
         <h3 class="modal-title" id="preview-filename">Pratinjau File</h3>
-        <button class="close-btn" onclick="closeModal('modal-preview')">&times;</button>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn-icon" id="btn-modal-download" style="background: var(--win-accent-dark); color: #fff;">
+            ⬇️ Unduh File
+          </button>
+          <button class="close-btn" onclick="closeModal('modal-preview')">&times;</button>
+        </div>
       </div>
       <div class="preview-content" id="preview-container">
         <!-- Media content -->

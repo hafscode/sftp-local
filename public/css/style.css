@@ -613,21 +613,27 @@ header {
     display: none;
   }
 
-  /* HIDE SECONDARY COLUMNS ON MOBILE DETAILS TABLE */
-  .col-mtime, .col-type {
-    display: none;
+  /* RESPONSIVE COLUMNS FOR MOBILE DETAILS TABLE */
+  .col-type {
+    display: none !important;
+  }
+
+  .col-mtime {
+    display: table-cell !important;
+    width: 30% !important;
+    font-size: 0.75rem !important;
   }
 
   .col-name {
-    width: 60% !important;
+    width: 40% !important;
   }
 
   .col-size {
-    width: 20% !important;
+    width: 15% !important;
   }
 
   .col-actions {
-    width: 20% !important;
+    width: 15% !important;
   }
 
   .details-table td {

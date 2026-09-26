@@ -43,6 +43,15 @@ function setupEventListeners() {
     sidebarOverlay.addEventListener('click', closeSidebar);
   }
 
+  // Close modal overlays when clicking outside modal content card (backdrop click)
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.classList.remove('active');
+      }
+    });
+  });
+
   // Navigation buttons
   document.getElementById('btn-nav-back').addEventListener('click', goBack);
   document.getElementById('btn-nav-forward').addEventListener('click', goForward);
@@ -454,16 +463,16 @@ function renderFileTable(items) {
     actionBtns += `<button class="btn-icon" style="color:var(--win-danger);" onclick="event.stopPropagation(); deleteItem('${escapeJsStr(itemSubpath)}')">🗑️</button>`;
 
     tr.innerHTML = `
-      <td>
-        <a href="javascript:void(0)" class="file-row-name" onclick="${item.isDirectory ? `loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}', true)` : `downloadFile('${escapeJsStr(itemSubpath)}')`}">
+      <td class="col-name">
+        <a href="javascript:void(0)" class="file-row-name" onclick="${item.isDirectory ? `loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}', true)` : `previewFile('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}', '${item.extension}')`}">
           <span class="file-item-icon">${icon}</span>
           <span>${escapeHtml(item.name)}</span>
         </a>
       </td>
-      <td style="color: var(--win-text-muted);">${dateText}</td>
-      <td style="color: var(--win-text-muted);">${typeName}</td>
-      <td style="color: var(--win-text-muted);">${sizeText}</td>
-      <td style="text-align: right;"><div class="row-actions" style="justify-content: flex-end;">${actionBtns}</div></td>
+      <td class="col-mtime" style="color: var(--win-text-muted);">${dateText}</td>
+      <td class="col-type" style="color: var(--win-text-muted);">${typeName}</td>
+      <td class="col-size" style="color: var(--win-text-muted);">${sizeText}</td>
+      <td class="col-actions" style="text-align: right;"><div class="row-actions" style="justify-content: flex-end;">${actionBtns}</div></td>
     `;
 
     tbody.appendChild(tr);
@@ -676,6 +685,12 @@ function previewFile(subpath, filename, ext) {
   container.innerHTML = '';
   document.getElementById('preview-filename').innerText = filename;
 
+  // Bind download button inside modal
+  const btnDownloadModal = document.getElementById('btn-modal-download');
+  if (btnDownloadModal) {
+    btnDownloadModal.onclick = () => downloadFile(subpath);
+  }
+
   const fileUrl = `/api/folders/${currentFolderId}/file?subpath=${encodeURIComponent(subpath)}&preview=1`;
   const lowerExt = (ext || '').toLowerCase();
 
@@ -687,13 +702,24 @@ function previewFile(subpath, filename, ext) {
     container.innerHTML = `<audio src="${fileUrl}" controls autoplay></audio>`;
   } else if (lowerExt === '.pdf') {
     container.innerHTML = `<iframe src="${fileUrl}"></iframe>`;
-  } else if (['.txt', '.json', '.md', '.js', '.html', '.css'].includes(lowerExt)) {
+  } else if (['.txt', '.json', '.md', '.js', '.html', '.css', '.py', '.sh', '.bat', '.cmd', '.xml', '.yaml', '.yml'].includes(lowerExt)) {
     container.innerHTML = `<p style="color:var(--win-text-muted)">Memuat isi teks...</p>`;
     fetch(fileUrl)
       .then(res => res.text())
       .then(text => {
-        container.innerHTML = `<pre style="background:var(--win-bg); padding:1rem; border-radius:4px; width:100%; max-height:60vh; overflow:auto; font-family:monospace; font-size:0.85rem;">${escapeHtml(text)}</pre>`;
+        container.innerHTML = `<pre style="background:var(--win-bg); padding:1rem; border-radius:4px; width:100%; max-height:60vh; overflow:auto; font-family:monospace; font-size:0.85rem; white-space:pre-wrap; word-break:break-all;">${escapeHtml(text)}</pre>`;
       });
+  } else {
+    // Non-direct media preview fallback card inside modal
+    container.innerHTML = `
+      <div style="text-align: center; padding: 2rem 1rem;">
+        <div style="font-size: 3.5rem; margin-bottom: 0.75rem;">📄</div>
+        <h4 style="margin-bottom: 0.5rem; font-weight: 600;">${escapeHtml(filename)}</h4>
+        <p style="color: var(--win-text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">File ini tidak dapat ditampilkan sebagai pratinjau media langsung.</p>
+        <button class="btn-icon" style="background: var(--win-accent-dark); color: #fff; padding: 0.6rem 1.25rem; font-size: 0.95rem;" onclick="downloadFile('${escapeJsStr(subpath)}')">
+          ⬇️ Unduh Berkas Ini
+        </button>
+      </div>`;
   }
 
   openModal('modal-preview');

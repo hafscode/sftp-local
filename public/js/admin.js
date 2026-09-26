@@ -101,6 +101,15 @@ function setupAdminEventListeners() {
     document.getElementById('edit-folder-path').value = sysBrowseCurrentPath;
     closeModal('modal-sys-browse');
   });
+
+  // Close modal overlays when clicking outside modal-card (backdrop click)
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.classList.remove('active');
+      }
+    });
+  });
 }
 
 // Check Admin Login Status

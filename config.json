@@ -9,8 +9,8 @@
       "path": "D:\\sftp-apps\\uploads",
       "allowUpload": true,
       "allowDownload": true,
-      "requiresOtp": false,
-      "otp": ""
+      "requiresOtp": true,
+      "otp": "3030"
     }
   ]
 }

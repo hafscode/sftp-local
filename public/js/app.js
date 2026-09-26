@@ -412,8 +412,9 @@ function renderFileTable(items) {
     tbody.innerHTML = `
       <tr>
         <td colspan="5" style="text-align: center; padding: 3rem; color: var(--win-text-muted);">
-          <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
-          <p>${isSearchMode ? 'Tidak ada file/folder yang cocok dengan pencarian' : 'Folder ini kosong'}</p>
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📭</div>
+          <p style="margin-bottom: 1rem;">${isSearchMode ? 'Tidak ada file/folder yang cocok dengan pencarian' : 'Folder ini kosong'}</p>
+          ${!isSearchMode ? `<button class="btn-icon" style="background: var(--win-accent-dark); color: #fff; padding: 0.55rem 1.25rem;" onclick="document.getElementById('file-input-files').click()">📄 Upload File Ke Sini</button>` : ''}
         </td>
       </tr>`;
     return;
@@ -453,11 +454,13 @@ function renderFileTable(items) {
     let actionBtns = '';
     if (item.isDirectory) {
       actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}', true)">Buka 📂</button>`;
+      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); shareLink('${escapeJsStr(itemSubpath)}', true)">Share 🔗</button>`;
       actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); downloadZip('${escapeJsStr(itemSubpath)}')">.ZIP 📦</button>`;
     } else {
       if (canPreview(item.extension)) {
         actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); previewFile('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}', '${item.extension}')">Lihat 👁️</button>`;
       }
+      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); shareLink('${escapeJsStr(itemSubpath)}', false)">Share 🔗</button>`;
       actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); downloadFile('${escapeJsStr(itemSubpath)}')">Unduh ⬇️</button>`;
     }
     actionBtns += `<button class="btn-icon" style="color:var(--win-danger);" onclick="event.stopPropagation(); deleteItem('${escapeJsStr(itemSubpath)}')">🗑️</button>`;
@@ -680,15 +683,91 @@ function canPreview(ext) {
   return mediaExts.includes((ext || '').toLowerCase());
 }
 
+// Share link helper function with Social Media integration
+function shareLink(subpath, isDirectory = false, filename = '') {
+  const name = filename || subpath.split(/[\/\\]/).pop() || 'Berkas Shared';
+  const baseUrl = (currentSystemInfo && currentSystemInfo.primaryIp) ? 
+    `http://${currentSystemInfo.primaryIp}:${currentSystemInfo.port}` : window.location.origin;
+  
+  let fullUrl = '';
+  if (isDirectory) {
+    fullUrl = `${baseUrl}/#folder=${currentFolderId}&subpath=${encodeURIComponent(subpath)}`;
+  } else {
+    fullUrl = `${baseUrl}/api/folders/${currentFolderId}/file?subpath=${encodeURIComponent(subpath)}`;
+  }
+  
+  const nameEl = document.getElementById('share-target-name');
+  const urlEl = document.getElementById('share-target-url');
+  if (nameEl) nameEl.innerText = name;
+  if (urlEl) urlEl.innerText = fullUrl;
+
+  // WhatsApp share link
+  const waText = encodeURIComponent(`📁 *Lihat berkas di ShareDrive LAN*:\n*${name}*\n${fullUrl}`);
+  const btnWa = document.getElementById('btn-share-wa');
+  if (btnWa) {
+    btnWa.onclick = () => {
+      window.open(`https://api.whatsapp.com/send?text=${waText}`, '_blank');
+    };
+  }
+
+  // Telegram share link
+  const btnTg = document.getElementById('btn-share-tg');
+  if (btnTg) {
+    btnTg.onclick = () => {
+      window.open(`https://t.me/share/url?url=${encodeURIComponent(fullUrl)}&text=${encodeURIComponent('Lihat berkas: ' + name)}`, '_blank');
+    };
+  }
+
+  // Native Mobile System Share
+  const btnNative = document.getElementById('btn-share-native');
+  if (btnNative) {
+    if (navigator.share) {
+      btnNative.style.display = 'inline-flex';
+      btnNative.onclick = () => {
+        navigator.share({
+          title: name,
+          text: 'Lihat berkas di ShareDrive Intranet:',
+          url: fullUrl
+        }).catch(err => console.log('Share canceled'));
+      };
+    } else {
+      btnNative.style.display = 'none';
+    }
+  }
+
+  // Copy Link button
+  const btnCopy = document.getElementById('btn-share-copy');
+  if (btnCopy) {
+    btnCopy.onclick = () => {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(fullUrl).then(() => {
+          alert('✅ Link berhasil disalin ke clipboard:\n' + fullUrl);
+        }).catch(() => {
+          prompt('Salin link di bawah ini:', fullUrl);
+        });
+      } else {
+        prompt('Salin link di bawah ini:', fullUrl);
+      }
+    };
+  }
+
+  openModal('modal-share');
+}
+
 function previewFile(subpath, filename, ext) {
   const container = document.getElementById('preview-container');
   container.innerHTML = '';
   document.getElementById('preview-filename').innerText = filename;
 
-  // Bind download button inside modal
+  // Bind download & share buttons inside modal
   const btnDownloadModal = document.getElementById('btn-modal-download');
   if (btnDownloadModal) {
     btnDownloadModal.onclick = () => downloadFile(subpath);
+  }
+
+  const btnShareModal = document.getElementById('btn-modal-share');
+  if (btnShareModal) {
+    btnShareModal.onclick = () => shareLink(subpath, false);
   }
 
   const fileUrl = `/api/folders/${currentFolderId}/file?subpath=${encodeURIComponent(subpath)}&preview=1`;
@@ -716,9 +795,14 @@ function previewFile(subpath, filename, ext) {
         <div style="font-size: 3.5rem; margin-bottom: 0.75rem;">📄</div>
         <h4 style="margin-bottom: 0.5rem; font-weight: 600;">${escapeHtml(filename)}</h4>
         <p style="color: var(--win-text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">File ini tidak dapat ditampilkan sebagai pratinjau media langsung.</p>
-        <button class="btn-icon" style="background: var(--win-accent-dark); color: #fff; padding: 0.6rem 1.25rem; font-size: 0.95rem;" onclick="downloadFile('${escapeJsStr(subpath)}')">
-          ⬇️ Unduh Berkas Ini
-        </button>
+        <div style="display: flex; gap: 0.5rem; justify-content: center;">
+          <button class="btn-icon" style="background: var(--win-card); border-color: var(--win-border); padding: 0.6rem 1.25rem; font-size: 0.95rem;" onclick="shareLink('${escapeJsStr(subpath)}', false)">
+            🔗 Share Link
+          </button>
+          <button class="btn-icon" style="background: var(--win-accent-dark); color: #fff; padding: 0.6rem 1.25rem; font-size: 0.95rem;" onclick="downloadFile('${escapeJsStr(subpath)}')">
+            ⬇️ Unduh Berkas Ini
+          </button>
+        </div>
       </div>`;
   }
 

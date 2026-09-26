@@ -683,6 +683,12 @@ async function handleFileSelection(files) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filenames })
     });
+
+    if (res.status === 401) {
+      uploadFiles(filesArray, 'replace');
+      return;
+    }
+
     const data = await res.json();
 
     if (data.existing && data.existing.length > 0) {

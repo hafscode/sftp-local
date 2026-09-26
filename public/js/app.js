@@ -1,7 +1,19 @@
 let currentFolderId = null;
 let currentSubpath = '';
 let currentFoldersData = [];
+let currentItems = [];
 let currentSystemInfo = null;
+
+// Navigation History Stack
+let navHistory = [];
+let historyIndex = -1;
+
+// Sorting state
+let sortColumn = 'name'; // 'name', 'mtime', 'type', 'size'
+let sortDirection = 'asc'; // 'asc' or 'desc'
+
+// Search state
+let isSearchMode = false;
 
 document.addEventListener('DOMContentLoaded', () => {
   initSystemInfo();
@@ -10,20 +22,61 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupEventListeners() {
-  // Copy LAN URL button
-  document.getElementById('btn-copy-url').addEventListener('click', () => {
-    if (currentSystemInfo && currentSystemInfo.localUrl) {
-      navigator.clipboard.writeText(currentSystemInfo.localUrl);
-      alert('Link LAN berhasil disalin: ' + currentSystemInfo.localUrl);
+  // Navigation buttons
+  document.getElementById('btn-nav-back').addEventListener('click', goBack);
+  document.getElementById('btn-nav-forward').addEventListener('click', goForward);
+  document.getElementById('btn-nav-up').addEventListener('click', goUp);
+  document.getElementById('btn-nav-refresh').addEventListener('click', refreshCurrentFolder);
+
+  // Search Input Handler (Debounced)
+  const searchInput = document.getElementById('search-input');
+  let searchTimeout = null;
+  searchInput.addEventListener('input', (e) => {
+    clearTimeout(searchTimeout);
+    const query = e.target.value.trim();
+    if (query.length > 0) {
+      searchTimeout = setTimeout(() => performSearch(query), 300);
+    } else if (isSearchMode) {
+      isSearchMode = false;
+      loadFolderContents(currentFolderId, currentSubpath, false);
     }
   });
 
-  // Show QR Modal button
+  // Action Toolbar Upload Buttons
+  document.getElementById('btn-upload-file').addEventListener('click', () => {
+    document.getElementById('file-input-files').click();
+  });
+
+  document.getElementById('btn-upload-folder').addEventListener('click', () => {
+    document.getElementById('file-input-folder').click();
+  });
+
+  document.getElementById('file-input-files').addEventListener('change', (e) => {
+    if (e.target.files.length > 0) uploadFiles(e.target.files);
+  });
+
+  document.getElementById('file-input-folder').addEventListener('change', (e) => {
+    if (e.target.files.length > 0) uploadFiles(e.target.files);
+  });
+
+  // Action Toolbar Create Folder & ZIP Buttons
+  document.getElementById('btn-create-folder').addEventListener('click', () => {
+    document.getElementById('new-folder-name').value = '';
+    openModal('modal-create-folder');
+  });
+
+  document.getElementById('btn-download-zip').addEventListener('click', () => {
+    if (!currentFolderId) return;
+    const url = `/api/folders/${currentFolderId}/download-zip?subpath=${encodeURIComponent(currentSubpath)}`;
+    window.open(url, '_blank');
+  });
+
+  // QR Code Modal Trigger
   document.getElementById('btn-show-qr').addEventListener('click', () => {
     openModal('modal-qr');
   });
 
-  // OTP Form submit
+  // Forms
   document.getElementById('form-otp').addEventListener('submit', async (e) => {
     e.preventDefault();
     const folderId = document.getElementById('otp-folder-id').value;
@@ -31,86 +84,43 @@ function setupEventListeners() {
     await verifyOtp(folderId, otp);
   });
 
-  // Create Folder Form submit
   document.getElementById('form-create-folder').addEventListener('submit', async (e) => {
     e.preventDefault();
     const newName = document.getElementById('new-folder-name').value;
     await createSubfolder(newName);
   });
 
-  document.getElementById('btn-create-folder').addEventListener('click', () => {
-    document.getElementById('new-folder-name').value = '';
-    openModal('modal-create-folder');
-  });
+  // Drag and Drop files onto Main Content Area
+  const mainContent = document.getElementById('main-content');
+  const dragOverlay = document.getElementById('drag-overlay');
 
-  // Download ZIP button
-  document.getElementById('btn-download-zip').addEventListener('click', () => {
-    if (!currentFolderId) return;
-    const url = `/api/folders/${currentFolderId}/download-zip?subpath=${encodeURIComponent(currentSubpath)}`;
-    window.open(url, '_blank');
-  });
-
-  // File Upload Handlers
-  const fileInputFiles = document.getElementById('file-input-files');
-  const fileInputFolder = document.getElementById('file-input-folder');
-  const dropzone = document.getElementById('dropzone');
-
-  fileInputFiles.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-      uploadFiles(e.target.files);
-    }
-  });
-
-  fileInputFolder.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-      uploadFiles(e.target.files);
-    }
-  });
-
-  // Drag & Drop
-  dropzone.addEventListener('dragover', (e) => {
+  mainContent.addEventListener('dragover', (e) => {
     e.preventDefault();
-    dropzone.classList.add('dragover');
+    dragOverlay.classList.add('active');
   });
 
-  dropzone.addEventListener('dragleave', () => {
-    dropzone.classList.remove('dragover');
+  dragOverlay.addEventListener('dragleave', () => {
+    dragOverlay.classList.remove('active');
   });
 
-  dropzone.addEventListener('drop', (e) => {
+  dragOverlay.addEventListener('drop', (e) => {
     e.preventDefault();
-    dropzone.classList.remove('dragover');
+    dragOverlay.classList.remove('active');
     if (e.dataTransfer.files.length > 0) {
       uploadFiles(e.dataTransfer.files);
     }
   });
 }
 
-// Modal Helper Functions
-function openModal(id) {
-  const el = document.getElementById(id);
-  if (el) el.classList.add('active');
-}
-
-function closeModal(id) {
-  const el = document.getElementById(id);
-  if (el) el.classList.remove('active');
-}
-
-// Fetch System LAN info
+// System LAN Info
 async function initSystemInfo() {
   try {
     const res = await fetch('/api/system-info');
     const data = await res.json();
     currentSystemInfo = data;
 
-    const bannerText = document.getElementById('lan-status-text');
-    if (data.ips && data.ips.length > 0) {
-      const ipList = data.ips.map(i => `${i.address}:${data.port}`).join(' | ');
-      bannerText.innerHTML = `Alamat LAN Server: <strong>http://${data.primaryIp}:${data.port}</strong> (Semua IP: ${ipList})`;
-    } else {
-      bannerText.innerHTML = `Alamat Server Lokal: <strong>http://localhost:${data.port}</strong>`;
-    }
+    const display = document.getElementById('lan-ip-display');
+    display.innerHTML = `IP LAN: <strong>http://${data.primaryIp}:${data.port}</strong>`;
 
     if (data.qrCodeUrl) {
       document.getElementById('qr-code-img').src = data.qrCodeUrl;
@@ -121,101 +131,147 @@ async function initSystemInfo() {
   }
 }
 
-// Load Available Shared Folders
+// Load Root Shared Folders for Sidebar
 async function loadSharedFolders() {
   try {
     const res = await fetch('/api/folders');
     const folders = await res.json();
     currentFoldersData = folders;
 
-    const tabsContainer = document.getElementById('folder-tabs');
-    tabsContainer.innerHTML = '';
+    const sidebarRootList = document.getElementById('sidebar-root-list');
+    sidebarRootList.innerHTML = '';
 
     if (folders.length === 0) {
-      tabsContainer.innerHTML = '<p style="color: var(--text-muted);">Belum ada folder yang di-share oleh Admin.</p>';
+      sidebarRootList.innerHTML = '<p style="padding: 0.5rem 0.75rem; color: var(--win-text-dim); font-size: 0.85rem;">Belum ada root folder.</p>';
       return;
     }
 
-    folders.forEach((folder, index) => {
-      const btn = document.createElement('button');
-      btn.className = `tab-btn ${index === 0 ? 'active' : ''}`;
+    folders.forEach(folder => {
+      const item = document.createElement('div');
+      item.className = 'sidebar-item';
+      item.dataset.id = folder.id;
       
       let badge = '';
       if (folder.requiresOtp) {
-        badge = folder.isVerified ? '<span class="badge-otp" style="background:var(--success-color);color:#fff">🔓 OTP OK</span>' : '<span class="badge-otp">🔒 OTP</span>';
+        badge = folder.isVerified ? ' 🔓' : ' 🔒';
       }
 
-      btn.innerHTML = `📁 ${escapeHtml(folder.name)} ${badge}`;
-      btn.addEventListener('click', () => selectFolder(folder.id));
-      tabsContainer.appendChild(btn);
+      item.innerHTML = `<span>📁</span> <span>${escapeHtml(folder.name)}${badge}</span>`;
+      item.addEventListener('click', () => selectRootFolder(folder.id));
+      sidebarRootList.appendChild(item);
     });
 
-    // Select first folder by default
     if (folders.length > 0 && !currentFolderId) {
-      selectFolder(folders[0].id);
+      selectRootFolder(folders[0].id);
     }
   } catch (err) {
-    console.error('Gagal memuat folder:', err);
+    console.error('Gagal memuat root folder:', err);
   }
 }
 
-// Select Active Shared Folder
-async function selectFolder(folderId) {
+// Select Active Root Folder
+async function selectRootFolder(folderId) {
   currentFolderId = folderId;
   currentSubpath = '';
-  
-  // Update Tab Active UI
+  isSearchMode = false;
+  document.getElementById('search-input').value = '';
+
   const folder = currentFoldersData.find(f => f.id === folderId);
-  const tabBtns = document.querySelectorAll('.tab-btn');
-  tabBtns.forEach((btn, index) => {
-    if (currentFoldersData[index] && currentFoldersData[index].id === folderId) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
-    }
-  });
+  updateSidebarActiveItem(folderId);
 
   if (folder && folder.requiresOtp && !folder.isVerified) {
     document.getElementById('otp-folder-id').value = folderId;
     document.getElementById('otp-input').value = '';
     openModal('modal-otp');
-    document.getElementById('file-list').innerHTML = `
-      <div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">
-        <h3>🔒 Folder Dilindungi OTP</h3>
-        <p style="margin-top: 0.5rem;">Masukkan PIN/OTP pada pop-up untuk membuka isi folder ini.</p>
-      </div>`;
+    document.getElementById('file-table-body').innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; padding: 3rem; color: var(--win-text-muted);">
+          <h3>🔒 Folder Dilindungi OTP</h3>
+          <p style="margin-top: 0.5rem;">Masukkan PIN/OTP untuk membaca struktur folder ini.</p>
+        </td>
+      </tr>`;
     return;
   }
 
-  await loadFolderContents(folderId, '');
+  await loadFolderContents(folderId, '', true);
+  await buildSidebarFolderTree(folderId);
 }
 
-// Verify OTP
-async function verifyOtp(folderId, otp) {
+// Build Sidebar Folder Structure Tree
+async function buildSidebarFolderTree(folderId, subpath = '', targetParentEl = null) {
   try {
-    const res = await fetch(`/api/folders/${folderId}/verify-otp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ otp })
-    });
+    const res = await fetch(`/api/folders/${folderId}/subdirs?subpath=${encodeURIComponent(subpath)}`);
+    if (res.status !== 200) return;
     const data = await res.json();
 
-    if (data.success) {
-      closeModal('modal-otp');
-      await loadSharedFolders();
-      await loadFolderContents(folderId, '');
-    } else {
-      alert(data.message || 'OTP salah!');
+    const parentEl = targetParentEl || document.getElementById('sidebar-tree-list');
+    if (!targetParentEl) parentEl.innerHTML = '';
+
+    if (!data.subdirs || data.subdirs.length === 0) {
+      if (!targetParentEl) {
+        parentEl.innerHTML = '<p style="padding: 0.25rem 0.75rem; color: var(--win-text-dim); font-size: 0.85rem;">(Tidak ada sub-folder)</p>';
+      }
+      return;
     }
+
+    data.subdirs.forEach(dir => {
+      const node = document.createElement('div');
+      node.style.cssText = 'display: flex; flex-direction: column; margin-left: 0.5rem;';
+
+      const item = document.createElement('div');
+      item.className = 'sidebar-item';
+      item.style.padding = '0.35rem 0.5rem';
+      item.style.fontSize = '0.85rem';
+      item.innerHTML = `<span class="tree-toggle">▶</span> <span>📁 ${escapeHtml(dir.name)}</span>`;
+
+      const childContainer = document.createElement('div');
+      childContainer.style.display = 'none';
+      childContainer.style.marginLeft = '0.75rem';
+
+      let isExpanded = false;
+      item.querySelector('.tree-toggle').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        isExpanded = !isExpanded;
+        item.querySelector('.tree-toggle').innerText = isExpanded ? '▼' : '▶';
+        if (isExpanded) {
+          childContainer.style.display = 'block';
+          if (childContainer.children.length === 0) {
+            await buildSidebarFolderTree(folderId, dir.subpath, childContainer);
+          }
+        } else {
+          childContainer.style.display = 'none';
+        }
+      });
+
+      item.addEventListener('click', () => {
+        loadFolderContents(folderId, dir.subpath, true);
+      });
+
+      node.appendChild(item);
+      node.appendChild(childContainer);
+      parentEl.appendChild(node);
+    });
+
   } catch (err) {
-    alert('Gagal verifikasi OTP: ' + err.message);
+    console.error('Gagal memuat pohon folder:', err);
   }
 }
 
-// Load Folder Contents & Files
-async function loadFolderContents(folderId, subpath) {
+// Load Folder Contents & Update History
+async function loadFolderContents(folderId, subpath, pushHistory = true) {
   currentFolderId = folderId;
   currentSubpath = subpath;
+  isSearchMode = false;
+
+  if (pushHistory) {
+    // Truncate history if navigated back and performed new navigation
+    if (historyIndex < navHistory.length - 1) {
+      navHistory = navHistory.slice(0, historyIndex + 1);
+    }
+    navHistory.push({ folderId, subpath });
+    historyIndex = navHistory.length - 1;
+  }
+  updateNavButtonsState();
 
   try {
     const res = await fetch(`/api/folders/${folderId}/contents?subpath=${encodeURIComponent(subpath)}`);
@@ -231,20 +287,45 @@ async function loadFolderContents(folderId, subpath) {
       return;
     }
 
+    currentItems = data.items || [];
     renderBreadcrumb(data.folderName, subpath);
-    renderFileList(data.items, data.allowUpload, data.allowDownload);
+    renderFileTable(currentItems);
 
-    // Toggle Upload dropzone & Create Folder button visibility
-    const dropzone = document.getElementById('dropzone');
-    const btnCreate = document.getElementById('btn-create-folder');
-    const btnZip = document.getElementById('btn-download-zip');
-
-    dropzone.style.display = data.allowUpload ? 'block' : 'none';
-    btnCreate.style.display = data.allowUpload ? 'inline-flex' : 'none';
-    btnZip.style.display = data.allowDownload ? 'inline-flex' : 'none';
+    // Update Status Bar
+    const totalSize = currentItems.reduce((acc, item) => acc + (item.size || 0), 0);
+    document.getElementById('status-item-count').innerText = `${currentItems.length} item (${formatFileSize(totalSize)})`;
 
   } catch (err) {
-    console.error('Gagal membaca direktori:', err);
+    console.error('Gagal memuat isi direktori:', err);
+  }
+}
+
+// Global Root Search Execution
+async function performSearch(query) {
+  if (!currentFolderId) return;
+  isSearchMode = true;
+
+  try {
+    const res = await fetch(`/api/folders/${currentFolderId}/search?q=${encodeURIComponent(query)}`);
+    const data = await res.json();
+
+    if (data.error) {
+      alert('Gagal mencari: ' + data.error);
+      return;
+    }
+
+    currentItems = data.items || [];
+    
+    // Update breadcrumb to show search mode
+    const breadcrumbContainer = document.getElementById('breadcrumb-paths');
+    breadcrumbContainer.innerHTML = `<span class="breadcrumb-item">Hasil Pencarian: "${escapeHtml(query)}"</span>`;
+
+    renderFileTable(currentItems);
+
+    document.getElementById('status-item-count').innerText = `Ditemukan ${currentItems.length} hasil pencarian`;
+
+  } catch (err) {
+    console.error('Gagal melakukan pencarian:', err);
   }
 }
 
@@ -256,7 +337,7 @@ function renderBreadcrumb(rootName, subpath) {
   const rootSpan = document.createElement('span');
   rootSpan.className = 'breadcrumb-item';
   rootSpan.innerText = rootName;
-  rootSpan.addEventListener('click', () => loadFolderContents(currentFolderId, ''));
+  rootSpan.addEventListener('click', () => loadFolderContents(currentFolderId, '', true));
   container.appendChild(rootSpan);
 
   if (!subpath) return;
@@ -264,10 +345,10 @@ function renderBreadcrumb(rootName, subpath) {
   const parts = subpath.split(/[\/\\]/).filter(p => p.length > 0);
   let accumulatedPath = '';
 
-  parts.forEach((part, index) => {
+  parts.forEach((part) => {
     const sep = document.createElement('span');
-    sep.className = 'breadcrumb-separator';
-    sep.innerText = ' / ';
+    sep.className = 'breadcrumb-sep';
+    sep.innerText = ' > ';
     container.appendChild(sep);
 
     accumulatedPath = accumulatedPath ? `${accumulatedPath}/${part}` : part;
@@ -276,81 +357,170 @@ function renderBreadcrumb(rootName, subpath) {
     const itemSpan = document.createElement('span');
     itemSpan.className = 'breadcrumb-item';
     itemSpan.innerText = part;
-    itemSpan.addEventListener('click', () => loadFolderContents(currentFolderId, targetPath));
+    itemSpan.addEventListener('click', () => loadFolderContents(currentFolderId, targetPath, true));
     container.appendChild(itemSpan);
   });
 }
 
-// Render Files and Subfolders List
-function renderFileList(items, allowUpload, allowDownload) {
-  const container = document.getElementById('file-list');
-  container.innerHTML = '';
+// Render File Table (Explorer Details View)
+function renderFileTable(items) {
+  const tbody = document.getElementById('file-table-body');
+  tbody.innerHTML = '';
 
   if (!items || items.length === 0) {
-    container.innerHTML = `
-      <div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">
-        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📭</div>
-        <p>Folder ini masih kosong.</p>
-      </div>`;
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; padding: 3rem; color: var(--win-text-muted);">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">📭</div>
+          <p>${isSearchMode ? 'Tidak ada file/folder yang cocok dengan pencarian' : 'Folder ini kosong'}</p>
+        </td>
+      </tr>`;
     return;
   }
 
-  items.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'file-row';
+  // Sort items
+  const sortedItems = [...items].sort((a, b) => {
+    // Keep folders at top by default unless sorting by specific file criteria
+    if (a.isDirectory && !b.isDirectory) return -1;
+    if (!a.isDirectory && b.isDirectory) return 1;
+
+    let valA = a[sortColumn];
+    let valB = b[sortColumn];
+
+    if (sortColumn === 'type') {
+      valA = getFileTypeName(a);
+      valB = getFileTypeName(b);
+    } else if (sortColumn === 'name') {
+      valA = (a.name || '').toLowerCase();
+      valB = (b.name || '').toLowerCase();
+    }
+
+    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  sortedItems.forEach(item => {
+    const tr = document.createElement('tr');
 
     const icon = getFileIcon(item);
-    const itemSubpath = currentSubpath ? `${currentSubpath}/${item.name}` : item.name;
+    const itemSubpath = item.subpath ? item.subpath : (currentSubpath ? `${currentSubpath}/${item.name}` : item.name);
+    const typeName = getFileTypeName(item);
+    const sizeText = item.isDirectory ? '' : formatFileSize(item.size);
+    const dateText = item.mtime ? new Date(item.mtime).toLocaleString('id-ID') : '-';
 
-    let sizeText = item.isDirectory ? 'Folder' : formatFileSize(item.size);
-    let dateText = item.mtime ? new Date(item.mtime).toLocaleString('id-ID') : '';
-
-    let actionButtons = '';
+    let actionBtns = '';
     if (item.isDirectory) {
-      actionButtons += `<button class="btn btn-secondary" onclick="event.stopPropagation(); loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}')">Buka 📂</button>`;
-      if (allowDownload) {
-        actionButtons += `<button class="btn btn-secondary" onclick="event.stopPropagation(); downloadZip('${escapeJsStr(itemSubpath)}')">.ZIP 📦</button>`;
-      }
+      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}', true)">Buka 📂</button>`;
+      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); downloadZip('${escapeJsStr(itemSubpath)}')">.ZIP 📦</button>`;
     } else {
       if (canPreview(item.extension)) {
-        actionButtons += `<button class="btn btn-secondary" onclick="event.stopPropagation(); previewFile('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}', '${item.extension}')">Lihat 👁️</button>`;
+        actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); previewFile('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}', '${item.extension}')">Lihat 👁️</button>`;
       }
-      if (allowDownload) {
-        actionButtons += `<button class="btn btn-success" onclick="event.stopPropagation(); downloadFile('${escapeJsStr(itemSubpath)}')">Unduh ⬇️</button>`;
-      }
+      actionBtns += `<button class="btn-icon" onclick="event.stopPropagation(); downloadFile('${escapeJsStr(itemSubpath)}')">Unduh ⬇️</button>`;
     }
+    actionBtns += `<button class="btn-icon" style="color:var(--win-danger);" onclick="event.stopPropagation(); deleteItem('${escapeJsStr(itemSubpath)}')">🗑️</button>`;
 
-    if (allowUpload) {
-      actionButtons += `<button class="btn btn-danger" onclick="event.stopPropagation(); deleteItem('${escapeJsStr(itemSubpath)}')">Hapus 🗑️</button>`;
-    }
-
-    row.innerHTML = `
-      <div class="file-icon">${icon}</div>
-      <div class="file-info">
-        <a href="javascript:void(0)" class="file-name" onclick="${item.isDirectory ? `loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}')` : `downloadFile('${escapeJsStr(itemSubpath)}')`}">${escapeHtml(item.name)}</a>
-        <div class="file-meta">${sizeText} • ${dateText}</div>
-      </div>
-      <div></div>
-      <div class="file-actions">${actionButtons}</div>
+    tr.innerHTML = `
+      <td>
+        <a href="javascript:void(0)" class="file-row-name" onclick="${item.isDirectory ? `loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}', true)` : `downloadFile('${escapeJsStr(itemSubpath)}')`}">
+          <span class="file-item-icon">${icon}</span>
+          <span>${escapeHtml(item.name)}</span>
+        </a>
+      </td>
+      <td style="color: var(--win-text-muted);">${dateText}</td>
+      <td style="color: var(--win-text-muted);">${typeName}</td>
+      <td style="color: var(--win-text-muted);">${sizeText}</td>
+      <td style="text-align: right;"><div class="row-actions" style="justify-content: flex-end;">${actionBtns}</div></td>
     `;
 
-    container.appendChild(row);
+    tbody.appendChild(tr);
   });
 }
 
-// Download File
+// Table Sort Handler
+function handleSort(column) {
+  if (sortColumn === column) {
+    sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortColumn = column;
+    sortDirection = 'asc';
+  }
+
+  // Update table header sort icons
+  ['name', 'mtime', 'type', 'size'].forEach(col => {
+    const iconSpan = document.getElementById(`sort-icon-${col}`);
+    if (iconSpan) {
+      if (col === sortColumn) {
+        iconSpan.innerText = sortDirection === 'asc' ? '🔼' : '🔽';
+      } else {
+        iconSpan.innerText = '';
+      }
+    }
+  });
+
+  renderFileTable(currentItems);
+}
+
+// Navigation History Functions
+function goBack() {
+  if (historyIndex > 0) {
+    historyIndex--;
+    const state = navHistory[historyIndex];
+    loadFolderContents(state.folderId, state.subpath, false);
+  }
+}
+
+function goForward() {
+  if (historyIndex < navHistory.length - 1) {
+    historyIndex++;
+    const state = navHistory[historyIndex];
+    loadFolderContents(state.folderId, state.subpath, false);
+  }
+}
+
+function goUp() {
+  if (!currentSubpath) return;
+  const parts = currentSubpath.split(/[\/\\]/).filter(p => p.length > 0);
+  parts.pop();
+  const parentSubpath = parts.join('/');
+  loadFolderContents(currentFolderId, parentSubpath, true);
+}
+
+function refreshCurrentFolder() {
+  if (currentFolderId) {
+    loadFolderContents(currentFolderId, currentSubpath, false);
+  }
+}
+
+function updateNavButtonsState() {
+  document.getElementById('btn-nav-back').disabled = historyIndex <= 0;
+  document.getElementById('btn-nav-forward').disabled = historyIndex >= navHistory.length - 1;
+  document.getElementById('btn-nav-up').disabled = !currentSubpath;
+}
+
+function updateSidebarActiveItem(folderId) {
+  const items = document.querySelectorAll('.sidebar-item');
+  items.forEach(item => {
+    if (item.dataset.id === folderId) {
+      item.classList.add('active');
+    } else {
+      item.classList.remove('active');
+    }
+  });
+}
+
+// File Actions
 function downloadFile(subpath) {
   const url = `/api/folders/${currentFolderId}/file?subpath=${encodeURIComponent(subpath)}`;
   window.open(url, '_blank');
 }
 
-// Download Folder ZIP
 function downloadZip(subpath) {
   const url = `/api/folders/${currentFolderId}/download-zip?subpath=${encodeURIComponent(subpath)}`;
   window.open(url, '_blank');
 }
 
-// Delete Item
 async function deleteItem(subpath) {
   if (!confirm(`Apakah Anda yakin ingin menghapus "${subpath}"?`)) return;
 
@@ -360,7 +530,7 @@ async function deleteItem(subpath) {
     });
     const data = await res.json();
     if (data.success) {
-      await loadFolderContents(currentFolderId, currentSubpath);
+      await loadFolderContents(currentFolderId, currentSubpath, false);
     } else {
       alert('Gagal menghapus: ' + data.error);
     }
@@ -369,7 +539,6 @@ async function deleteItem(subpath) {
   }
 }
 
-// Create Subfolder
 async function createSubfolder(newFolderName) {
   try {
     const res = await fetch(`/api/folders/${currentFolderId}/create-folder`, {
@@ -383,7 +552,8 @@ async function createSubfolder(newFolderName) {
     const data = await res.json();
     if (data.success) {
       closeModal('modal-create-folder');
-      await loadFolderContents(currentFolderId, currentSubpath);
+      await loadFolderContents(currentFolderId, currentSubpath, false);
+      await buildSidebarFolderTree(currentFolderId);
     } else {
       alert('Gagal membuat folder: ' + data.error);
     }
@@ -392,7 +562,6 @@ async function createSubfolder(newFolderName) {
   }
 }
 
-// Upload Files / Folders with progress
 function uploadFiles(files) {
   if (!currentFolderId) return;
 
@@ -400,37 +569,19 @@ function uploadFiles(files) {
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     formData.append('files', file);
-    // Include webkitRelativePath if present for folder upload preserving structure
     if (file.webkitRelativePath) {
       formData.append('relativePath', file.webkitRelativePath);
     }
   }
 
-  const progressContainer = document.getElementById('upload-progress-container');
-  const progressFill = document.getElementById('upload-progress-fill');
-  const statusText = document.getElementById('upload-status-text');
-
-  progressContainer.style.display = 'block';
-  progressFill.style.width = '0%';
-  statusText.innerText = `Mengunggah ${files.length} file...`;
-
   const xhr = new XMLHttpRequest();
   xhr.open('POST', `/api/folders/${currentFolderId}/upload?subpath=${encodeURIComponent(currentSubpath)}`);
 
-  xhr.upload.onprogress = (e) => {
-    if (e.lengthComputable) {
-      const percent = Math.round((e.loaded / e.total) * 100);
-      progressFill.style.width = percent + '%';
-      statusText.innerText = `Mengunggah ${files.length} file (${percent}%)...`;
-    }
-  };
-
   xhr.onload = async () => {
-    progressContainer.style.display = 'none';
     if (xhr.status === 200) {
       const response = JSON.parse(xhr.responseText);
       alert(response.message || 'File berhasil diunggah');
-      await loadFolderContents(currentFolderId, currentSubpath);
+      await loadFolderContents(currentFolderId, currentSubpath, false);
     } else {
       const response = JSON.parse(xhr.responseText);
       alert('Gagal mengunggah: ' + (response.error || 'Server error'));
@@ -438,17 +589,54 @@ function uploadFiles(files) {
   };
 
   xhr.onerror = () => {
-    progressContainer.style.display = 'none';
     alert('Terjadi kesalahan jaringan saat mengunggah.');
   };
 
   xhr.send(formData);
 }
 
-// File Preview Helper
+async function verifyOtp(folderId, otp) {
+  try {
+    const res = await fetch(`/api/folders/${folderId}/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ otp })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      closeModal('modal-otp');
+      await loadSharedFolders();
+      await loadFolderContents(folderId, '', true);
+    } else {
+      alert(data.message || 'OTP salah!');
+    }
+  } catch (err) {
+    alert('Gagal verifikasi OTP: ' + err.message);
+  }
+}
+
+// Helpers
+function getFileTypeName(item) {
+  if (item.isDirectory) return 'Folder File';
+  const ext = (item.extension || '').toLowerCase();
+  const map = {
+    '.jpg': 'Gambar JPEG', '.jpeg': 'Gambar JPEG', '.png': 'Gambar PNG', '.gif': 'Gambar GIF', '.svg': 'Gambar SVG', '.webp': 'Gambar WebP',
+    '.mp4': 'Video MP4', '.webm': 'Video WebM', '.mkv': 'Video MKV', '.avi': 'Video AVI',
+    '.mp3': 'Audio MP3', '.wav': 'Audio WAV', '.ogg': 'Audio OGG',
+    '.pdf': 'Dokumen PDF',
+    '.doc': 'Dokumen Word', '.docx': 'Dokumen Word',
+    '.xls': 'Lembar Kerja Excel', '.xlsx': 'Lembar Kerja Excel',
+    '.ppt': 'Presentasi PowerPoint', '.pptx': 'Presentasi PowerPoint',
+    '.txt': 'Berkas Teks', '.json': 'Berkas JSON', '.csv': 'Berkas CSV',
+    '.zip': 'Arsip ZIP', '.rar': 'Arsip RAR', '.7z': 'Arsip 7-Zip'
+  };
+  return map[ext] || `Berkas ${ext.replace('.', '').toUpperCase() || 'File'}`;
+}
+
 function canPreview(ext) {
   const mediaExts = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.mp4', '.webm', '.mp3', '.wav', '.pdf', '.txt', '.json', '.md'];
-  return mediaExts.includes(ext.toLowerCase());
+  return mediaExts.includes((ext || '').toLowerCase());
 }
 
 function previewFile(subpath, filename, ext) {
@@ -457,8 +645,7 @@ function previewFile(subpath, filename, ext) {
   document.getElementById('preview-filename').innerText = filename;
 
   const fileUrl = `/api/folders/${currentFolderId}/file?subpath=${encodeURIComponent(subpath)}&preview=1`;
-
-  const lowerExt = ext.toLowerCase();
+  const lowerExt = (ext || '').toLowerCase();
 
   if (['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp'].includes(lowerExt)) {
     container.innerHTML = `<img src="${fileUrl}" alt="${escapeHtml(filename)}">`;
@@ -469,21 +656,20 @@ function previewFile(subpath, filename, ext) {
   } else if (lowerExt === '.pdf') {
     container.innerHTML = `<iframe src="${fileUrl}"></iframe>`;
   } else if (['.txt', '.json', '.md', '.js', '.html', '.css'].includes(lowerExt)) {
-    container.innerHTML = `<p style="color:var(--text-muted)">Memuat isi teks...</p>`;
+    container.innerHTML = `<p style="color:var(--win-text-muted)">Memuat isi teks...</p>`;
     fetch(fileUrl)
       .then(res => res.text())
       .then(text => {
-        container.innerHTML = `<pre style="background:var(--bg-primary); padding:1rem; border-radius:8px; width:100%; max-height:60vh; overflow:auto; font-family:monospace; font-size:0.9rem;">${escapeHtml(text)}</pre>`;
+        container.innerHTML = `<pre style="background:var(--win-bg); padding:1rem; border-radius:4px; width:100%; max-height:60vh; overflow:auto; font-family:monospace; font-size:0.85rem;">${escapeHtml(text)}</pre>`;
       });
   }
 
   openModal('modal-preview');
 }
 
-// Icon mapper
 function getFileIcon(item) {
   if (item.isDirectory) return '📁';
-  const ext = item.extension.toLowerCase();
+  const ext = (item.extension || '').toLowerCase();
   if (['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp'].includes(ext)) return '🖼️';
   if (['.mp4', '.mkv', '.avi', '.mov', '.webm'].includes(ext)) return '🎬';
   if (['.mp3', '.wav', '.ogg', '.flac'].includes(ext)) return '🎵';
@@ -495,17 +681,27 @@ function getFileIcon(item) {
 }
 
 function formatFileSize(bytes) {
-  if (bytes === 0) return '0 B';
+  if (!bytes || bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('active');
 }
 
 function escapeHtml(str) {
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function escapeJsStr(str) {
-  return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }

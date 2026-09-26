@@ -312,6 +312,109 @@ app.get('/api/folders/:id/contents', (req, res) => {
   }
 });
 
+// Recursive search helper
+function searchFilesInDirectory(basePath, currentSubpath, query, results = [], maxResults = 200) {
+  if (results.length >= maxResults) return results;
+  const targetPath = path.join(basePath, currentSubpath);
+  if (!fs.existsSync(targetPath)) return results;
+
+  let items = [];
+  try {
+    items = fs.readdirSync(targetPath, { withFileTypes: true });
+  } catch (e) {
+    return results;
+  }
+
+  for (const item of items) {
+    if (results.length >= maxResults) break;
+    const itemSubpath = currentSubpath ? path.join(currentSubpath, item.name) : item.name;
+    const fullPath = path.join(targetPath, item.name);
+    let stat = {};
+    try { stat = fs.statSync(fullPath); } catch (e) {}
+
+    if (item.name.toLowerCase().includes(query.toLowerCase())) {
+      results.push({
+        name: item.name,
+        subpath: itemSubpath.replace(/\\/g, '/'),
+        isDirectory: item.isDirectory(),
+        size: item.isDirectory() ? 0 : stat.size || 0,
+        mtime: stat.mtime || null,
+        extension: item.isDirectory() ? '' : path.extname(item.name).toLowerCase()
+      });
+    }
+
+    if (item.isDirectory()) {
+      searchFilesInDirectory(basePath, itemSubpath, query, results, maxResults);
+    }
+  }
+  return results;
+}
+
+// Get subdirectories tree helper
+function getSubdirectories(basePath, currentSubpath = '') {
+  const targetPath = path.join(basePath, currentSubpath);
+  if (!fs.existsSync(targetPath)) return [];
+
+  try {
+    const items = fs.readdirSync(targetPath, { withFileTypes: true });
+    return items
+      .filter(item => item.isDirectory())
+      .map(item => ({
+        name: item.name,
+        subpath: currentSubpath ? `${currentSubpath}/${item.name}` : item.name
+      }));
+  } catch (e) {
+    return [];
+  }
+}
+
+// Global Search endpoint across folder root
+app.get('/api/folders/:id/search', (req, res) => {
+  const folderId = req.params.id;
+  const query = req.query.q || '';
+  const folder = config.sharedFolders.find(f => f.id === folderId);
+
+  if (!folder) return res.status(404).json({ error: 'Folder tidak ditemukan' });
+  if (folder.requiresOtp && !req.session.verifiedFolders[folderId]) {
+    return res.status(401).json({ error: 'OTP_REQUIRED' });
+  }
+
+  if (!query.trim()) {
+    return res.json({ items: [] });
+  }
+
+  try {
+    const matches = searchFilesInDirectory(folder.path, '', query.trim());
+    res.json({
+      folderName: folder.name,
+      query: query,
+      items: matches
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Get Subdirectories for sidebar tree expansion
+app.get('/api/folders/:id/subdirs', (req, res) => {
+  const folderId = req.params.id;
+  const subpath = req.query.subpath || '';
+  const folder = config.sharedFolders.find(f => f.id === folderId);
+
+  if (!folder) return res.status(404).json({ error: 'Folder tidak ditemukan' });
+  if (folder.requiresOtp && !req.session.verifiedFolders[folderId]) {
+    return res.status(401).json({ error: 'OTP_REQUIRED' });
+  }
+
+  try {
+    const subdirs = getSubdirectories(folder.path, subpath);
+    res.json({ subdirs });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+
 // Download or Preview Single File
 app.get('/api/folders/:id/file', (req, res) => {
   const folderId = req.params.id;

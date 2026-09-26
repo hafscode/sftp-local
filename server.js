@@ -277,21 +277,22 @@ app.get('/api/folders/:id/contents', (req, res) => {
     }
 
     const items = fs.readdirSync(targetPath, { withFileTypes: true });
-    const result = items.map(item => {
+    const result = [];
+    for (const item of items) {
       const itemFullPath = path.join(targetPath, item.name);
-      let stat = {};
       try {
-        stat = fs.statSync(itemFullPath);
-      } catch (e) {}
-
-      return {
-        name: item.name,
-        isDirectory: item.isDirectory(),
-        size: item.isDirectory() ? 0 : stat.size || 0,
-        mtime: stat.mtime || null,
-        extension: item.isDirectory() ? '' : path.extname(item.name).toLowerCase()
-      };
-    });
+        const stat = fs.statSync(itemFullPath);
+        result.push({
+          name: item.name,
+          isDirectory: item.isDirectory(),
+          size: item.isDirectory() ? 0 : stat.size || 0,
+          mtime: stat.mtime || null,
+          extension: item.isDirectory() ? '' : path.extname(item.name).toLowerCase()
+        });
+      } catch (e) {
+        // Skip inaccessible or delete-pending ghost files on Windows NTFS
+      }
+    }
 
     // Sort folders first, then files alphabetically
     result.sort((a, b) => {
@@ -329,8 +330,12 @@ function searchFilesInDirectory(basePath, currentSubpath, query, results = [], m
     if (results.length >= maxResults) break;
     const itemSubpath = currentSubpath ? path.join(currentSubpath, item.name) : item.name;
     const fullPath = path.join(targetPath, item.name);
-    let stat = {};
-    try { stat = fs.statSync(fullPath); } catch (e) {}
+    let stat;
+    try {
+      stat = fs.statSync(fullPath);
+    } catch (e) {
+      continue; // Skip inaccessible or delete-pending ghost files
+    }
 
     if (item.name.toLowerCase().includes(query.toLowerCase())) {
       results.push({
@@ -451,6 +456,8 @@ app.get('/api/folders/:id/file', (req, res) => {
 
     const stream = fs.createReadStream(filePath);
     stream.pipe(res);
+    res.on('close', () => { stream.destroy(); });
+    req.on('aborted', () => { stream.destroy(); });
   } catch (err) {
     res.status(400).send(err.message);
   }
@@ -566,11 +573,12 @@ app.delete('/api/folders/:id/delete', (req, res) => {
     if (stat.isDirectory()) {
       fs.rmSync(targetPath, { recursive: true, force: true });
     } else {
+      try { fs.chmodSync(targetPath, 0o666); } catch (e) {}
       fs.unlinkSync(targetPath);
     }
     res.json({ success: true, message: 'Item berhasil dihapus' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: 'Gagal menghapus: ' + err.message });
   }
 });
 

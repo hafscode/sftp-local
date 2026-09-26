@@ -7,6 +7,7 @@ let currentSystemInfo = null;
 // Navigation History Stack
 let navHistory = [];
 let historyIndex = -1;
+let isUploadCompleted = false;
 
 // Sorting state
 let sortColumn = 'name'; // 'name', 'mtime', 'type', 'size'
@@ -52,6 +53,34 @@ function setupEventListeners() {
     });
   });
 
+  // Handle Mobile Hardware Back Button / Browser Back Button via HTML5 PopState
+  window.addEventListener('popstate', (e) => {
+    // 1. If any modal popup is active, close it first!
+    const activeModal = document.querySelector('.modal-overlay.active');
+    if (activeModal) {
+      activeModal.classList.remove('active');
+      return;
+    }
+
+    // 2. If mobile sidebar drawer is active, close it first!
+    const sidebarContainer = document.getElementById('sidebar-container');
+    if (sidebarContainer && sidebarContainer.classList.contains('active')) {
+      closeSidebar();
+      return;
+    }
+
+    // 3. Handle folder history state navigation from hardware back button
+    if (e.state && e.state.folderId !== undefined) {
+      loadFolderContents(e.state.folderId, e.state.subpath || '', false);
+      if (typeof e.state.historyIndex === 'number') {
+        historyIndex = e.state.historyIndex;
+      }
+      updateNavButtonsState();
+    } else {
+      parseHashUrlAndNavigate();
+    }
+  });
+
   // Navigation buttons
   document.getElementById('btn-nav-back').addEventListener('click', goBack);
   document.getElementById('btn-nav-forward').addEventListener('click', goForward);
@@ -89,6 +118,14 @@ function setupEventListeners() {
   document.getElementById('file-input-folder').addEventListener('change', (e) => {
     if (e.target.files.length > 0) uploadFiles(e.target.files);
   });
+
+  // Floating Upload Widget Button Handler
+  const btnFloatUpload = document.getElementById('btn-float-upload');
+  if (btnFloatUpload) {
+    btnFloatUpload.addEventListener('click', () => {
+      openModal('modal-upload-detail');
+    });
+  }
 
   // Action Toolbar Create Folder & ZIP Buttons
   document.getElementById('btn-create-folder').addEventListener('click', () => {
@@ -311,6 +348,13 @@ async function loadFolderContents(folderId, subpath, pushHistory = true) {
     }
     navHistory.push({ folderId, subpath });
     historyIndex = navHistory.length - 1;
+
+    // Sync HTML5 History state so Mobile Hardware Back button navigates within file explorer
+    const stateData = { folderId, subpath, historyIndex };
+    const hashUrl = `#folder=${encodeURIComponent(folderId)}&subpath=${encodeURIComponent(subpath)}`;
+    if (window.location.hash !== hashUrl) {
+      history.pushState(stateData, '', hashUrl);
+    }
   }
   updateNavButtonsState();
 
@@ -568,6 +612,14 @@ function downloadZip(subpath) {
 async function deleteItem(subpath) {
   if (!confirm(`Apakah Anda yakin ingin menghapus "${subpath}"?`)) return;
 
+  // Stop any active media preview stream to release file handle on Windows
+  const previewModal = document.getElementById('modal-preview');
+  if (previewModal && previewModal.classList.contains('active')) {
+    const container = document.getElementById('preview-container');
+    if (container) container.innerHTML = '';
+    closeModal('modal-preview');
+  }
+
   try {
     const res = await fetch(`/api/folders/${currentFolderId}/delete?subpath=${encodeURIComponent(subpath)}`, {
       method: 'DELETE'
@@ -607,8 +659,66 @@ async function createSubfolder(newFolderName) {
 }
 
 function uploadFiles(files) {
-  if (!currentFolderId) return;
+  if (!currentFolderId || !files || files.length === 0) return;
 
+  isUploadCompleted = false;
+
+  const btnFloat = document.getElementById('btn-float-upload');
+  const iconFloat = document.getElementById('float-upload-icon');
+  const badgeFloat = document.getElementById('float-upload-badge');
+
+  const detailTitle = document.getElementById('upload-detail-title');
+  const detailStatusText = document.getElementById('upload-detail-status-text');
+  const detailPercent = document.getElementById('upload-detail-percent');
+  const detailBar = document.getElementById('upload-detail-bar');
+  const detailSizeText = document.getElementById('upload-detail-size-text');
+  const detailFileCount = document.getElementById('upload-detail-file-count');
+  const fileListContainer = document.getElementById('upload-file-list');
+
+  // Calculate total payload size
+  let totalBytes = 0;
+  const fileArray = Array.from(files);
+  fileArray.forEach(f => totalBytes += (f.size || 0));
+
+  // Initialize Floating Widget State
+  if (btnFloat) {
+    btnFloat.style.display = 'flex';
+    btnFloat.classList.remove('success');
+  }
+  if (iconFloat) {
+    iconFloat.innerText = '📤';
+  }
+  if (badgeFloat) {
+    badgeFloat.innerText = '0%';
+  }
+
+  // Initialize Detail Modal UI
+  if (detailTitle) detailTitle.innerText = '📤 Status Pengunggahan Berkas';
+  if (detailStatusText) detailStatusText.innerText = 'Mengunggah berkas...';
+  if (detailPercent) detailPercent.innerText = '0%';
+  if (detailBar) detailBar.style.width = '0%';
+  if (detailSizeText) detailSizeText.innerText = `0 B / ${formatFileSize(totalBytes)}`;
+  if (detailFileCount) detailFileCount.innerText = `${fileArray.length} File`;
+
+  // Render file list items in detail modal
+  if (fileListContainer) {
+    fileListContainer.innerHTML = '';
+    fileArray.forEach((f, index) => {
+      const fileNameStr = f.webkitRelativePath || f.name;
+      const itemEl = document.createElement('div');
+      itemEl.className = 'upload-file-item';
+      itemEl.id = `upload-item-${index}`;
+      itemEl.innerHTML = `
+        <span class="upload-file-name" title="${escapeHtml(fileNameStr)}">
+          📄 ${escapeHtml(fileNameStr)}
+        </span>
+        <span class="upload-file-status" id="upload-status-${index}">⏳ Mengunggah...</span>
+      `;
+      fileListContainer.appendChild(itemEl);
+    });
+  }
+
+  // Prepare FormData
   const formData = new FormData();
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -621,19 +731,79 @@ function uploadFiles(files) {
   const xhr = new XMLHttpRequest();
   xhr.open('POST', `/api/folders/${currentFolderId}/upload?subpath=${encodeURIComponent(currentSubpath)}`);
 
+  // XHR Progress Handler
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+      const pct = Math.round((e.loaded / e.total) * 100);
+      if (pct >= 100) {
+        if (badgeFloat) badgeFloat.innerText = 'Memproses...';
+        if (detailPercent) detailPercent.innerText = '99%';
+        if (detailBar) detailBar.style.width = '99%';
+        if (detailStatusText) detailStatusText.innerText = 'Menyimpan berkas di server...';
+      } else {
+        if (badgeFloat) badgeFloat.innerText = `${pct}%`;
+        if (detailPercent) detailPercent.innerText = `${pct}%`;
+        if (detailBar) detailBar.style.width = `${pct}%`;
+        if (detailStatusText) detailStatusText.innerText = 'Mengunggah berkas...';
+      }
+      if (detailSizeText) detailSizeText.innerText = `${formatFileSize(e.loaded)} / ${formatFileSize(e.total)}`;
+    }
+  };
+
+  // XHR Completion Handler
   xhr.onload = async () => {
     if (xhr.status === 200) {
-      const response = JSON.parse(xhr.responseText);
-      alert(response.message || 'File berhasil diunggah');
+      isUploadCompleted = true;
+      if (btnFloat) btnFloat.classList.add('success');
+      if (iconFloat) {
+        iconFloat.innerText = '✅';
+      }
+      if (badgeFloat) badgeFloat.innerText = 'Upload Berhasil';
+
+      if (detailTitle) detailTitle.innerText = '✅ Pengunggahan Selesai';
+      if (detailStatusText) detailStatusText.innerText = 'Semua berkas telah berhasil diunggah!';
+      if (detailPercent) detailPercent.innerText = '100%';
+      if (detailBar) detailBar.style.width = '100%';
+      if (detailSizeText) detailSizeText.innerText = `${formatFileSize(totalBytes)} / ${formatFileSize(totalBytes)}`;
+
+      fileArray.forEach((_, index) => {
+        const statusEl = document.getElementById(`upload-status-${index}`);
+        if (statusEl) {
+          statusEl.innerText = '✅ Berhasil';
+          statusEl.className = 'upload-file-status success';
+        }
+      });
+
       await loadFolderContents(currentFolderId, currentSubpath, false);
     } else {
-      const response = JSON.parse(xhr.responseText);
-      alert('Gagal mengunggah: ' + (response.error || 'Server error'));
+      let errMsg = 'Server Error';
+      try {
+        const response = JSON.parse(xhr.responseText);
+        if (response.error) errMsg = response.error;
+      } catch (err) {}
+
+      if (iconFloat) {
+        iconFloat.innerText = '❌';
+      }
+      if (badgeFloat) badgeFloat.innerText = 'Gagal';
+      if (detailStatusText) detailStatusText.innerText = 'Gagal mengunggah: ' + errMsg;
+
+      fileArray.forEach((_, index) => {
+        const statusEl = document.getElementById(`upload-status-${index}`);
+        if (statusEl) {
+          statusEl.innerText = '❌ Gagal';
+          statusEl.className = 'upload-file-status error';
+        }
+      });
     }
   };
 
   xhr.onerror = () => {
-    alert('Terjadi kesalahan jaringan saat mengunggah.');
+    if (iconFloat) {
+      iconFloat.innerText = '❌';
+    }
+    if (badgeFloat) badgeFloat.innerText = 'Error';
+    if (detailStatusText) detailStatusText.innerText = 'Terjadi kesalahan koneksi jaringan.';
   };
 
   xhr.send(formData);
@@ -878,12 +1048,45 @@ function formatFileSize(bytes) {
 
 function openModal(id) {
   const el = document.getElementById(id);
-  if (el) el.classList.add('active');
+  if (el) {
+    el.classList.add('active');
+    // Push modal state so Hardware Back on HP closes popup modal first
+    const hashUrl = `#modal=${encodeURIComponent(id)}`;
+    if (window.location.hash !== hashUrl) {
+      history.pushState({ modalId: id, folderId: currentFolderId, subpath: currentSubpath }, '', hashUrl);
+    }
+  }
 }
 
 function closeModal(id) {
   const el = document.getElementById(id);
-  if (el) el.classList.remove('active');
+  if (el && el.classList.contains('active')) {
+    el.classList.remove('active');
+  }
+
+  // Auto-hide floating button when upload detail modal is closed after successful upload
+  if (id === 'modal-upload-detail' && isUploadCompleted) {
+    const btnFloat = document.getElementById('btn-float-upload');
+    if (btnFloat) {
+      btnFloat.style.display = 'none';
+    }
+    isUploadCompleted = false;
+  }
+}
+
+function parseHashUrlAndNavigate() {
+  const hash = window.location.hash;
+  if (hash && hash.includes('folder=')) {
+    const cleanHash = hash.replace(/^#/, '');
+    const params = new URLSearchParams(cleanHash);
+    const folderId = params.get('folder');
+    const subpath = params.get('subpath') || '';
+    if (folderId) {
+      loadFolderContents(folderId, subpath, false);
+      return true;
+    }
+  }
+  return false;
 }
 
 function escapeHtml(str) {

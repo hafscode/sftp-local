@@ -59,6 +59,11 @@ function setupEventListeners() {
     const activeModal = document.querySelector('.modal-overlay.active');
     if (activeModal) {
       activeModal.classList.remove('active');
+      if (window.location.hash.includes('modal=')) {
+        const cleanFolderHash = window.location.hash.split('&modal=')[0].split('#modal=')[0];
+        const targetHash = cleanFolderHash || `#folder=${encodeURIComponent(currentFolderId || '')}&subpath=${encodeURIComponent(currentSubpath || '')}`;
+        history.replaceState({ folderId: currentFolderId, subpath: currentSubpath }, '', targetHash);
+      }
       return;
     }
 
@@ -242,7 +247,9 @@ async function loadSharedFolders() {
       sidebarRootList.appendChild(item);
     });
 
-    if (folders.length > 0 && !currentFolderId) {
+    // Check URL hash for folder & subpath first on page load
+    const navigatedFromHash = parseHashUrlAndNavigate();
+    if (!navigatedFromHash && folders.length > 0 && !currentFolderId) {
       selectRootFolder(folders[0].id);
     }
   } catch (err) {
@@ -1125,11 +1132,19 @@ function formatFileSize(bytes) {
 function openModal(id) {
   const el = document.getElementById(id);
   if (el) {
+    // Close any other active modal first to prevent overlay stack blocking
+    document.querySelectorAll('.modal-overlay.active').forEach(m => {
+      if (m.id !== id) m.classList.remove('active');
+    });
+
     el.classList.add('active');
-    // Push modal state so Hardware Back on HP closes popup modal first
-    const hashUrl = `#modal=${encodeURIComponent(id)}`;
-    if (window.location.hash !== hashUrl) {
-      history.pushState({ modalId: id, folderId: currentFolderId, subpath: currentSubpath }, '', hashUrl);
+
+    // Always build base folder hash from active state so folder location is preserved
+    const baseFolderHash = `#folder=${encodeURIComponent(currentFolderId || '')}&subpath=${encodeURIComponent(currentSubpath || '')}`;
+    const modalHash = `${baseFolderHash}&modal=${encodeURIComponent(id)}`;
+
+    if (window.location.hash !== modalHash) {
+      history.pushState({ modalId: id, folderId: currentFolderId, subpath: currentSubpath }, '', modalHash);
     }
   }
 }
@@ -1139,6 +1154,10 @@ function closeModal(id) {
   if (el && el.classList.contains('active')) {
     el.classList.remove('active');
   }
+
+  // Restore clean folder location hash
+  const baseFolderHash = `#folder=${encodeURIComponent(currentFolderId || '')}&subpath=${encodeURIComponent(currentSubpath || '')}`;
+  history.replaceState({ folderId: currentFolderId, subpath: currentSubpath }, '', baseFolderHash);
 
   // Auto-hide floating button when upload detail modal is closed after successful upload
   if (id === 'modal-upload-detail' && isUploadCompleted) {
@@ -1152,15 +1171,23 @@ function closeModal(id) {
 
 function parseHashUrlAndNavigate() {
   const hash = window.location.hash;
-  if (hash && hash.includes('folder=')) {
-    const cleanHash = hash.replace(/^#/, '');
-    const params = new URLSearchParams(cleanHash);
-    const folderId = params.get('folder');
-    const subpath = params.get('subpath') || '';
-    if (folderId) {
-      loadFolderContents(folderId, subpath, false);
-      return true;
-    }
+  if (!hash) return false;
+
+  const cleanHash = hash.replace(/^#/, '');
+  const hashWithoutModal = cleanHash.replace(/&modal=[^&]*/, '').replace(/modal=[^&]*/, '');
+  const params = new URLSearchParams(hashWithoutModal);
+  const folderId = params.get('folder');
+  const subpath = params.get('subpath') || '';
+
+  if (folderId) {
+    currentFolderId = folderId;
+    currentSubpath = subpath;
+    loadFolderContents(folderId, subpath, false);
+
+    // Clean up modal parameter from URL hash on load
+    const folderHash = `#folder=${encodeURIComponent(folderId)}&subpath=${encodeURIComponent(subpath)}`;
+    history.replaceState({ folderId, subpath }, '', folderHash);
+    return true;
   }
   return false;
 }

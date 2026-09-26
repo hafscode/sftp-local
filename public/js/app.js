@@ -683,6 +683,41 @@ function canPreview(ext) {
   return mediaExts.includes((ext || '').toLowerCase());
 }
 
+// Share original physical file binary directly via Web Share API Level 2 (WhatsApp/System share)
+async function shareOriginalFile(subpath, filename) {
+  const fileUrl = `/api/folders/${currentFolderId}/file?subpath=${encodeURIComponent(subpath)}`;
+  const btnFileShare = document.getElementById('btn-share-file');
+  const originalText = btnFileShare ? btnFileShare.innerText : '';
+  
+  try {
+    if (btnFileShare) btnFileShare.innerText = '⏳ Memuat berkas fisik...';
+
+    const res = await fetch(fileUrl);
+    if (!res.ok) throw new Error('Gagal mengunduh berkas dari server');
+    
+    const blob = await res.blob();
+    const mimeType = blob.type || 'application/octet-stream';
+    const fileObj = new File([blob], filename, { type: mimeType });
+
+    if (navigator.canShare && navigator.canShare({ files: [fileObj] })) {
+      if (btnFileShare) btnFileShare.innerText = originalText;
+      await navigator.share({
+        title: filename,
+        text: 'Mengirimkan berkas asli:',
+        files: [fileObj]
+      });
+    } else {
+      if (btnFileShare) btnFileShare.innerText = originalText;
+      alert('Perangkat/Browser ini tidak mendukung pengiriman berkas fisik secara langsung. Silakan gunakan tombol "Bagikan Tautan/URL" atau unduh berkas terlebih dahulu.');
+    }
+  } catch (err) {
+    if (btnFileShare) btnFileShare.innerText = originalText;
+    if (err.name !== 'AbortError' && err.name !== 'NotAllowedError') {
+      alert('Gagal membagikan berkas fisik: ' + err.message);
+    }
+  }
+}
+
 // Share link helper function with Social Media integration
 function shareLink(subpath, isDirectory = false, filename = '') {
   const name = filename || subpath.split(/[\/\\]/).pop() || 'Berkas Shared';
@@ -700,6 +735,17 @@ function shareLink(subpath, isDirectory = false, filename = '') {
   const urlEl = document.getElementById('share-target-url');
   if (nameEl) nameEl.innerText = name;
   if (urlEl) urlEl.innerText = fullUrl;
+
+  // Direct Original Physical File Share Button
+  const btnFileShare = document.getElementById('btn-share-file');
+  if (btnFileShare) {
+    if (!isDirectory) {
+      btnFileShare.style.display = 'inline-flex';
+      btnFileShare.onclick = () => shareOriginalFile(subpath, name);
+    } else {
+      btnFileShare.style.display = 'none';
+    }
+  }
 
   // WhatsApp share link
   const waText = encodeURIComponent(`📁 *Lihat berkas di ShareDrive LAN*:\n*${name}*\n${fullUrl}`);

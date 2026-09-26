@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Windows File Explorer - ShareDrive Local LAN</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -11,30 +11,34 @@
   <!-- TOP HEADER & TITLE BAR -->
   <header>
     <div class="win-title-group">
+      <!-- SIDEBAR TOGGLE BUTTON FOR MOBILE & DESKTOP -->
+      <button class="btn-icon sidebar-toggle-btn" id="btn-toggle-sidebar" title="Buka/Tutup Sidebar (Menu)">
+        ☰
+      </button>
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
       </svg>
-      <span>File Explorer Intranet</span>
+      <span class="app-title-text">File Explorer Intranet</span>
     </div>
-    <div style="display: flex; gap: 0.5rem; align-items: center;">
-      <button class="btn-icon" id="btn-show-qr" title="Hubungkan HP via QR Code">📱 HP Connect (QR)</button>
-      <a href="/admin.html" class="btn-icon" style="text-decoration: none;" title="Admin Dashboard">⚙️ Admin Panel</a>
+    <div class="header-right-nav">
+      <button class="btn-icon" id="btn-show-qr" title="Hubungkan HP via QR Code">📱 HP Connect</button>
+      <a href="/admin.html" class="btn-icon" style="text-decoration: none;" title="Admin Dashboard">⚙️ Admin</a>
     </div>
   </header>
 
   <!-- ADDRESS BAR & SEARCH ROW -->
   <div class="win-address-search-row">
     <div class="win-nav-buttons">
-      <button class="btn-icon" id="btn-nav-back" title="Kembali (Back)">⬅️</button>
-      <button class="btn-icon" id="btn-nav-forward" title="Maju (Forward)">➡️</button>
-      <button class="btn-icon" id="btn-nav-up" title="Folder Induk (Up)">⬆️</button>
-      <button class="btn-icon" id="btn-nav-refresh" title="Muat Ulang (Refresh)">🔄</button>
+      <button class="btn-icon nav-btn" id="btn-nav-back" title="Kembali (Back)">⬅️</button>
+      <button class="btn-icon nav-btn" id="btn-nav-forward" title="Maju (Forward)">➡️</button>
+      <button class="btn-icon nav-btn" id="btn-nav-up" title="Folder Induk (Up)">⬆️</button>
+      <button class="btn-icon nav-btn" id="btn-nav-refresh" title="Muat Ulang (Refresh)">🔄</button>
     </div>
 
     <!-- ADDRESS BREADCRUMB -->
     <div class="address-bar" id="address-bar">
       <span class="address-bar-icon">📁</span>
-      <div id="breadcrumb-paths" style="display: flex; align-items: center; gap: 0.25rem;">
+      <div id="breadcrumb-paths" class="breadcrumb-container">
         <span class="breadcrumb-item">Shared Root</span>
       </div>
     </div>
@@ -42,32 +46,40 @@
     <!-- GLOBAL ROOT SEARCH BOX -->
     <div class="search-box">
       <span class="search-box-icon">🔍</span>
-      <input type="text" id="search-input" class="search-input" placeholder="Cari file/folder di root ini..." autocomplete="off">
+      <input type="text" id="search-input" class="search-input" placeholder="Cari file/folder..." autocomplete="off">
     </div>
   </div>
 
   <!-- EXPLORER ACTION TOOLBAR -->
   <div class="explorer-toolbar">
     <div class="toolbar-left">
-      <button class="btn-icon" id="btn-create-folder">📁 Folder Baru</button>
-      <button class="btn-icon" id="btn-upload-file">📄 Unggah File</button>
-      <button class="btn-icon" id="btn-upload-folder">📂 Unggah Folder</button>
-      <button class="btn-icon" id="btn-download-zip" style="color: var(--win-success);">📦 Unduh Folder (.zip)</button>
+      <button class="btn-icon toolbar-btn" id="btn-create-folder">📁 Folder Baru</button>
+      <button class="btn-icon toolbar-btn" id="btn-upload-file">📄 Upload File</button>
+      <button class="btn-icon toolbar-btn" id="btn-upload-folder">📂 Upload Folder</button>
+      <button class="btn-icon toolbar-btn" id="btn-download-zip" style="color: var(--win-success);">📦 Download ZIP</button>
       
       <!-- Hidden file inputs -->
       <input type="file" id="file-input-files" multiple style="display: none;">
       <input type="file" id="file-input-folder" webkitdirectory directory multiple style="display: none;">
     </div>
     <div class="toolbar-right">
-      <span id="lan-ip-display" style="font-size: 0.8rem; color: var(--win-text-muted);">IP LAN: Loading...</span>
+      <span id="lan-ip-display" class="lan-ip-badge">IP LAN: Loading...</span>
     </div>
   </div>
+
+  <!-- BACKDROP OVERLAY FOR MOBILE SIDEBAR -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
   <!-- MAIN EXPLORER BODY: SIDEBAR & FILE DETAILS -->
   <div class="explorer-body">
 
     <!-- LEFT SIDEBAR: STRUCTURE FOLDER TREE -->
     <div class="sidebar" id="sidebar-container">
+      <div class="sidebar-header-mobile">
+        <span style="font-weight: 600;">📁 Navigasi Direktori</span>
+        <button class="close-btn" id="btn-close-sidebar">&times;</button>
+      </div>
+
       <div class="sidebar-section-title">Root Folder Shared</div>
       <div id="sidebar-root-list">
         <!-- Root Shared Folders -->
@@ -94,19 +106,19 @@
         <table class="details-table">
           <thead>
             <tr>
-              <th onclick="handleSort('name')" style="width: 45%;">
+              <th onclick="handleSort('name')" class="col-name">
                 Nama <span id="sort-icon-name" class="sort-icon">🔽</span>
               </th>
-              <th onclick="handleSort('mtime')" style="width: 20%;">
+              <th onclick="handleSort('mtime')" class="col-mtime">
                 Tanggal Modifikasi <span id="sort-icon-mtime" class="sort-icon"></span>
               </th>
-              <th onclick="handleSort('type')" style="width: 15%;">
+              <th onclick="handleSort('type')" class="col-type">
                 Tipe <span id="sort-icon-type" class="sort-icon"></span>
               </th>
-              <th onclick="handleSort('size')" style="width: 10%;">
+              <th onclick="handleSort('size')" class="col-size">
                 Ukuran <span id="sort-icon-size" class="sort-icon"></span>
               </th>
-              <th style="width: 10%; text-align: right;">Tindakan</th>
+              <th class="col-actions" style="text-align: right;">Tindakan</th>
             </tr>
           </thead>
           <tbody id="file-table-body">
@@ -118,7 +130,7 @@
       <!-- BOTTOM STATUS BAR -->
       <div class="status-bar">
         <span id="status-item-count">0 item</span>
-        <span id="status-selection-info">Akses Intranet LAN Terisolasi</span>
+        <span id="status-selection-info" class="status-info-text">Intranet LAN Ready</span>
       </div>
 
     </div>

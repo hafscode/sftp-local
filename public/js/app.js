@@ -22,11 +22,33 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupEventListeners() {
+  // Mobile Sidebar Toggle Handlers
+  const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
+  const btnCloseSidebar = document.getElementById('btn-close-sidebar');
+  const sidebarContainer = document.getElementById('sidebar-container');
+  const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+  if (btnToggleSidebar) {
+    btnToggleSidebar.addEventListener('click', () => {
+      sidebarContainer.classList.toggle('active');
+      sidebarOverlay.classList.toggle('active');
+    });
+  }
+
+  if (btnCloseSidebar) {
+    btnCloseSidebar.addEventListener('click', closeSidebar);
+  }
+
+  if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', closeSidebar);
+  }
+
   // Navigation buttons
   document.getElementById('btn-nav-back').addEventListener('click', goBack);
   document.getElementById('btn-nav-forward').addEventListener('click', goForward);
   document.getElementById('btn-nav-up').addEventListener('click', goUp);
   document.getElementById('btn-nav-refresh').addEventListener('click', refreshCurrentFolder);
+
 
   // Search Input Handler (Debounced)
   const searchInput = document.getElementById('search-input');
@@ -169,8 +191,16 @@ async function loadSharedFolders() {
   }
 }
 
+function closeSidebar() {
+  const sidebarContainer = document.getElementById('sidebar-container');
+  const sidebarOverlay = document.getElementById('sidebar-overlay');
+  if (sidebarContainer) sidebarContainer.classList.remove('active');
+  if (sidebarOverlay) sidebarOverlay.classList.remove('active');
+}
+
 // Select Active Root Folder
 async function selectRootFolder(folderId) {
+  closeSidebar();
   currentFolderId = folderId;
   currentSubpath = '';
   isSearchMode = false;
@@ -244,6 +274,7 @@ async function buildSidebarFolderTree(folderId, subpath = '', targetParentEl = n
       });
 
       item.addEventListener('click', () => {
+        closeSidebar();
         loadFolderContents(folderId, dir.subpath, true);
       });
 
@@ -256,6 +287,7 @@ async function buildSidebarFolderTree(folderId, subpath = '', targetParentEl = n
     console.error('Gagal memuat pohon folder:', err);
   }
 }
+
 
 // Load Folder Contents & Update History
 async function loadFolderContents(folderId, subpath, pushHistory = true) {

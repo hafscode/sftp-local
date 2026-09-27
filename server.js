@@ -29,7 +29,7 @@ function loadConfig() {
   return {
     adminPassword: 'admin',
     enforceLocalOnly: true,
-    port: 3000,
+    port: 2323,
     sharedFolders: [
       {
         id: 'uploads-default',
@@ -1085,13 +1085,16 @@ app.get('/api/admin/config', requireAdmin, (req, res) => {
 
 // Update System Settings
 app.post('/api/admin/settings', requireAdmin, (req, res) => {
-  const { adminPassword, enforceLocalOnly, theme } = req.body;
+  const { adminPassword, enforceLocalOnly, theme, port } = req.body;
   if (adminPassword) config.adminPassword = adminPassword;
   if (typeof enforceLocalOnly === 'boolean') config.enforceLocalOnly = enforceLocalOnly;
   if (theme && ['dark', 'light'].includes(theme)) config.theme = theme;
-  
+  if (port && !isNaN(port) && Number(port) > 0 && Number(port) < 65536) {
+    config.port = Number(port);
+  }
+
   if (saveConfig(config)) {
-    res.json({ success: true, message: 'Pengaturan sistem berhasil diperbarui', theme: config.theme || 'dark' });
+    res.json({ success: true, message: 'Pengaturan sistem berhasil diperbarui', theme: config.theme || 'dark', port: config.port });
   } else {
     res.status(500).json({ error: 'Gagal menyimpan konfigurasi' });
   }
@@ -1213,7 +1216,7 @@ app.post('/api/admin/system-browse', requireAdmin, (req, res) => {
 });
 
 // Start Server
-const PORT = config.port || 3000;
+const PORT = config.port || 2323;
 app.listen(PORT, '0.0.0.0', () => {
   const ips = getLocalIpAddresses();
   console.log(`\n==================================================`);

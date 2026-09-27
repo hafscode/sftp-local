@@ -1,7 +1,7 @@
 {
   "adminPassword": "admin",
   "enforceLocalOnly": true,
-  "port": 3000,
+  "port": 2323,
   "sharedFolders": [
     {
       "id": "uploads-default",

@@ -68,6 +68,7 @@ function setupAdminEventListeners() {
     const newPass = document.getElementById('set-admin-pass').value;
     const enforceLocal = document.getElementById('set-enforce-local').checked;
     const themeVal = document.getElementById('set-app-theme').value;
+    const portVal = document.getElementById('set-app-port').value;
 
     try {
       const res = await fetch('/api/admin/settings', {
@@ -76,12 +77,13 @@ function setupAdminEventListeners() {
         body: JSON.stringify({
           adminPassword: newPass || undefined,
           enforceLocalOnly: enforceLocal,
-          theme: themeVal
+          theme: themeVal,
+          port: portVal ? Number(portVal) : undefined
         })
       });
       const data = await res.json();
       if (data.success) {
-        alert('Pengaturan sistem & tema berhasil disimpan!');
+        alert('Pengaturan sistem, tema & port berhasil disimpan!');
         document.getElementById('set-admin-pass').value = '';
         if (data.theme) applyTheme(data.theme);
         loadAdminDashboard();
@@ -248,6 +250,10 @@ async function loadAdminDashboard() {
     const configData = await configRes.json();
 
     document.getElementById('set-enforce-local').checked = !!configData.enforceLocalOnly;
+    const portInput = document.getElementById('set-app-port');
+    if (portInput) {
+      portInput.value = configData.port || 2323;
+    }
     if (configData.theme && !localStorage.getItem('app-theme')) {
       applyTheme(configData.theme);
     }

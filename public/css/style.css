@@ -466,6 +466,20 @@ header {
   outline: 2px dashed var(--win-success);
 }
 
+/* SELECTION MODE CHECKBOX VISIBILITY */
+.col-checkbox,
+.grid-checkbox-wrapper {
+  display: none !important;
+}
+
+body.selection-mode-active .col-checkbox {
+  display: table-cell !important;
+}
+
+body.selection-mode-active .grid-checkbox-wrapper {
+  display: block !important;
+}
+
 .col-checkbox input[type="checkbox"] {
   width: 16px;
   height: 16px;

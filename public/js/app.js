@@ -870,23 +870,7 @@ function renderFileTableView(sortedItems, tbody) {
       });
     }
 
-    tr.addEventListener('click', (e) => {
-      if (e.target.closest('.row-actions') || e.target.closest('.action-dropdown-container') || e.target.closest('button')) {
-        return;
-      }
-      toggleRowSelection(itemSubpath);
-    });
-
-    tr.addEventListener('dblclick', (e) => {
-      if (e.target.closest('.row-actions') || e.target.closest('.action-dropdown-container') || e.target.closest('button')) {
-        return;
-      }
-      if (item.isDirectory) {
-        loadFolderContents(currentFolderId, itemSubpath, true);
-      } else {
-        previewFile(itemSubpath, item.name, item.extension, item);
-      }
-    });
+    attachItemInteractions(tr, itemSubpath, item);
 
     let actionBtns = '';
     actionBtns += `<button class="btn-icon" title="Edit / Rename" onclick="event.stopPropagation(); promptRename('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}')">✏️</button>`;
@@ -1040,25 +1024,96 @@ function renderFileGridView(sortedItems, gridContainer) {
       });
     }
 
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('.grid-more-wrapper') || e.target.closest('.action-dropdown-container') || e.target.closest('button') || e.target.closest('input')) {
-        return;
-      }
-      toggleRowSelection(itemSubpath);
-    });
-
-    card.addEventListener('dblclick', (e) => {
-      if (e.target.closest('.grid-more-wrapper') || e.target.closest('.action-dropdown-container') || e.target.closest('button') || e.target.closest('input')) {
-        return;
-      }
-      if (item.isDirectory) {
-        loadFolderContents(currentFolderId, itemSubpath, true);
-      } else {
-        previewFile(itemSubpath, item.name, item.extension, item);
-      }
-    });
+    attachItemInteractions(card, itemSubpath, item);
 
     gridContainer.appendChild(card);
+  });
+}
+
+// Attach Long Press & Click Interactions for Item Selection
+function attachItemInteractions(el, itemSubpath, item) {
+  let longPressTimer = null;
+  let isLongPressTriggered = false;
+  let startX = 0;
+  let startY = 0;
+
+  function startPress(e) {
+    if (e.button === 2 || e.target.closest('.row-actions') || e.target.closest('.grid-more-wrapper') || e.target.closest('.action-dropdown-container') || e.target.closest('button') || e.target.closest('input')) {
+      return;
+    }
+
+    isLongPressTriggered = false;
+    startX = e.touches ? e.touches[0].clientX : e.clientX;
+    startY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      isLongPressTriggered = true;
+      if (!selectedItems.has(itemSubpath)) {
+        selectedItems.add(itemSubpath);
+        renderFileTable(currentItems);
+      }
+    }, 500);
+  }
+
+  function movePress(e) {
+    if (!longPressTimer) return;
+    const currentX = e.touches ? e.touches[0].clientX : e.clientX;
+    const currentY = e.touches ? e.touches[0].clientY : e.clientY;
+    if (Math.hypot(currentX - startX, currentY - startY) > 10) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }
+
+  function cancelPress() {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+
+  el.addEventListener('touchstart', startPress, { passive: true });
+  el.addEventListener('touchmove', movePress, { passive: true });
+  el.addEventListener('touchend', cancelPress);
+  el.addEventListener('touchcancel', cancelPress);
+
+  el.addEventListener('mousedown', startPress);
+  el.addEventListener('mousemove', movePress);
+  el.addEventListener('mouseup', cancelPress);
+  el.addEventListener('mouseleave', cancelPress);
+
+  el.addEventListener('click', (e) => {
+    if (e.target.closest('.row-actions') || e.target.closest('.grid-more-wrapper') || e.target.closest('.action-dropdown-container') || e.target.closest('button') || e.target.closest('input')) {
+      return;
+    }
+
+    if (isLongPressTriggered) {
+      isLongPressTriggered = false;
+      return;
+    }
+
+    // IF SELECTION MODE IS ACTIVE (> 0 items selected): Single click toggles selection
+    if (selectedItems.size > 0) {
+      toggleRowSelection(itemSubpath);
+      return;
+    }
+
+    // IF SELECTION MODE IS INACTIVE (0 items selected): Single click opens/previews
+    if (item.isDirectory) {
+      loadFolderContents(currentFolderId, itemSubpath, true);
+    } else {
+      previewFile(itemSubpath, item.name, item.extension, item);
+    }
+  });
+
+  el.addEventListener('dblclick', (e) => {
+    if (e.target.closest('.row-actions') || e.target.closest('.grid-more-wrapper') || e.target.closest('.action-dropdown-container') || e.target.closest('button') || e.target.closest('input')) {
+      return;
+    }
+    if (item.isDirectory) {
+      loadFolderContents(currentFolderId, itemSubpath, true);
+    } else {
+      previewFile(itemSubpath, item.name, item.extension, item);
+    }
   });
 }
 
@@ -1102,6 +1157,12 @@ function updateToolbarSelectionState() {
   const btnPaste = document.getElementById('btn-paste');
   const btnDelete = document.getElementById('btn-delete-selected');
   const badge = document.getElementById('selected-count-badge');
+
+  if (count > 0) {
+    document.body.classList.add('selection-mode-active');
+  } else {
+    document.body.classList.remove('selection-mode-active');
+  }
 
   if (btnCut) btnCut.disabled = count === 0;
   if (btnCopy) btnCopy.disabled = count === 0;

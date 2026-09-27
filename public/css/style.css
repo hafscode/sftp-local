@@ -448,6 +448,13 @@ header {
   position: relative;
 }
 
+.details-table tr {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .details-table tr:hover {
   background: var(--win-hover);
 }
@@ -1214,6 +1221,9 @@ button[style*="var(--win-accent-dark)"],
   position: relative;
   cursor: pointer;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
   transition: all 0.15s ease;
   min-height: 145px;
   justify-content: space-between;

@@ -827,6 +827,10 @@ function renderFileTableView(sortedItems, tbody) {
     tr.dataset.isDirectory = item.isDirectory ? 'true' : 'false';
 
     tr.addEventListener('dragstart', (e) => {
+      if (window.lastLongPressTime && (Date.now() - window.lastLongPressTime < 1000)) {
+        e.preventDefault();
+        return false;
+      }
       let dragList = [];
       if (selectedItems.has(itemSubpath)) {
         dragList = Array.from(selectedItems);
@@ -981,6 +985,10 @@ function renderFileGridView(sortedItems, gridContainer) {
     `;
 
     card.addEventListener('dragstart', (e) => {
+      if (window.lastLongPressTime && (Date.now() - window.lastLongPressTime < 1000)) {
+        e.preventDefault();
+        return false;
+      }
       let dragList = [];
       if (selectedItems.has(itemSubpath)) {
         dragList = Array.from(selectedItems);
@@ -1049,6 +1057,7 @@ function attachItemInteractions(el, itemSubpath, item) {
     clearTimeout(longPressTimer);
     longPressTimer = setTimeout(() => {
       isLongPressTriggered = true;
+      window.lastLongPressTime = Date.now();
       if (!selectedItems.has(itemSubpath)) {
         selectedItems.add(itemSubpath);
         renderFileTable(currentItems);
@@ -1071,6 +1080,15 @@ function attachItemInteractions(el, itemSubpath, item) {
     longPressTimer = null;
   }
 
+  // Prevent default contextmenu popup on long-press (mobile Safari / Chrome)
+  el.addEventListener('contextmenu', (e) => {
+    if (isLongPressTriggered || (window.lastLongPressTime && (Date.now() - window.lastLongPressTime < 1000))) {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+  });
+
   el.addEventListener('touchstart', startPress, { passive: true });
   el.addEventListener('touchmove', movePress, { passive: true });
   el.addEventListener('touchend', cancelPress);
@@ -1086,8 +1104,10 @@ function attachItemInteractions(el, itemSubpath, item) {
       return;
     }
 
-    if (isLongPressTriggered) {
+    if (isLongPressTriggered || (window.lastLongPressTime && (Date.now() - window.lastLongPressTime < 500))) {
       isLongPressTriggered = false;
+      e.preventDefault();
+      e.stopPropagation();
       return;
     }
 

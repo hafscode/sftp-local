@@ -152,16 +152,38 @@ function getSafePath(baseFolderPath, subPath = '') {
 function getUniqueFilename(destDir, originalName) {
   const filename = path.basename(originalName);
   const ext = path.extname(filename);
-  const nameWithoutExt = path.basename(filename, ext);
+  const targetFullPath = path.join(destDir, filename);
+  const isDir = fs.existsSync(targetFullPath) ? fs.statSync(targetFullPath).isDirectory() : ext === '';
 
   let candidate = filename;
   let counter = 1;
 
   while (fs.existsSync(path.join(destDir, candidate))) {
-    candidate = `${nameWithoutExt} (${counter})${ext}`;
+    if (ext && !isDir) {
+      const nameWithoutExt = path.basename(filename, ext);
+      candidate = `${nameWithoutExt} (${counter})${ext}`;
+    } else {
+      candidate = `${filename} (${counter})`;
+    }
     counter++;
   }
   return candidate;
+}
+
+function copyRecursiveSync(src, dest) {
+  const exists = fs.existsSync(src);
+  const stats = exists && fs.statSync(src);
+  const isDirectory = exists && stats.isDirectory();
+  if (isDirectory) {
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+    fs.readdirSync(src).forEach((childItemName) => {
+      copyRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
+    });
+  } else {
+    fs.copyFileSync(src, dest);
+  }
 }
 
 // Multer storage engine
@@ -681,6 +703,235 @@ app.post('/api/folders/:id/rename', (req, res) => {
     res.json({ success: true, message: 'Nama berhasil diubah' });
   } catch (err) {
     res.status(400).json({ error: 'Gagal mengubah nama: ' + err.message });
+  }
+});
+
+// Check if items exist in destination folder before pasting or moving
+app.post('/api/folders/:id/check-paste-exists', (req, res) => {
+  const folderId = req.params.id;
+  const { items, targetSubpath } = req.body;
+  const folder = config.sharedFolders.find(f => f.id === folderId);
+
+  if (!folder) return res.status(404).json({ error: 'Folder tidak ditemukan' });
+  if (folder.requiresOtp && !req.session.verifiedFolders[folderId]) {
+    return res.status(401).json({ error: 'OTP diperlukan' });
+  }
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.json({ existing: [] });
+  }
+
+  const existing = [];
+  try {
+    const destDir = getSafePath(folder.path, targetSubpath || '');
+    items.forEach(itemSubpath => {
+      const basename = path.basename(itemSubpath);
+      const destPath = path.join(destDir, basename);
+      if (fs.existsSync(destPath)) {
+        existing.push(basename);
+      }
+    });
+    res.json({ existing });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Copy Files/Folders
+app.post('/api/folders/:id/copy', (req, res) => {
+  const folderId = req.params.id;
+  const { items, targetSubpath, conflictAction = 'rename' } = req.body;
+  const folder = config.sharedFolders.find(f => f.id === folderId);
+
+  if (!folder) return res.status(404).json({ error: 'Folder tidak ditemukan' });
+  if (!folder.allowUpload) return res.status(403).json({ error: 'Salin file tidak diizinkan di folder ini' });
+  if (folder.requiresOtp && !req.session.verifiedFolders[folderId]) {
+    return res.status(401).json({ error: 'OTP diperlukan' });
+  }
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Tidak ada item yang dipilih untuk disalin' });
+  }
+
+  try {
+    const destDir = getSafePath(folder.path, targetSubpath || '');
+    if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
+      return res.status(404).json({ error: 'Folder tujuan tidak ditemukan' });
+    }
+
+    let copiedCount = 0;
+    for (const itemSubpath of items) {
+      const srcPath = getSafePath(folder.path, itemSubpath);
+      if (!fs.existsSync(srcPath)) continue;
+
+      const basename = path.basename(srcPath);
+      let destPath = path.join(destDir, basename);
+
+      // Avoid copying folder into itself
+      if (fs.statSync(srcPath).isDirectory() && destPath.startsWith(srcPath)) {
+        continue;
+      }
+
+      if (fs.existsSync(destPath)) {
+        if (conflictAction === 'replace') {
+          fs.rmSync(destPath, { recursive: true, force: true });
+        } else {
+          const uniqueName = getUniqueFilename(destDir, basename);
+          destPath = path.join(destDir, uniqueName);
+        }
+      }
+
+      copyRecursiveSync(srcPath, destPath);
+      copiedCount++;
+    }
+
+    res.json({ success: true, message: `${copiedCount} item berhasil disalin` });
+  } catch (err) {
+    res.status(400).json({ error: 'Gagal menyalin item: ' + err.message });
+  }
+});
+
+// Move (Cut & Paste) Files/Folders
+app.post('/api/folders/:id/move', (req, res) => {
+  const folderId = req.params.id;
+  const { items, targetSubpath, conflictAction = 'rename' } = req.body;
+  const folder = config.sharedFolders.find(f => f.id === folderId);
+
+  if (!folder) return res.status(404).json({ error: 'Folder tidak ditemukan' });
+  if (!folder.allowUpload) return res.status(403).json({ error: 'Memindahkan file tidak diizinkan di folder ini' });
+  if (folder.requiresOtp && !req.session.verifiedFolders[folderId]) {
+    return res.status(401).json({ error: 'OTP diperlukan' });
+  }
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Tidak ada item yang dipilih untuk dipindahkan' });
+  }
+
+  try {
+    const destDir = getSafePath(folder.path, targetSubpath || '');
+    if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
+      return res.status(404).json({ error: 'Folder tujuan tidak ditemukan' });
+    }
+
+    let movedCount = 0;
+    for (const itemSubpath of items) {
+      const srcPath = getSafePath(folder.path, itemSubpath);
+      if (!fs.existsSync(srcPath)) continue;
+
+      const basename = path.basename(srcPath);
+      let destPath = path.join(destDir, basename);
+
+      if (srcPath === destPath && conflictAction !== 'rename') continue;
+
+      // Avoid moving folder into itself
+      if (fs.statSync(srcPath).isDirectory() && destPath.startsWith(srcPath)) {
+        continue;
+      }
+
+      if (fs.existsSync(destPath)) {
+        if (srcPath === destPath || conflictAction === 'rename') {
+          const uniqueName = getUniqueFilename(destDir, basename);
+          destPath = path.join(destDir, uniqueName);
+        } else if (conflictAction === 'replace') {
+          fs.rmSync(destPath, { recursive: true, force: true });
+        }
+      }
+
+      try {
+        fs.renameSync(srcPath, destPath);
+      } catch (e) {
+        copyRecursiveSync(srcPath, destPath);
+        fs.rmSync(srcPath, { recursive: true, force: true });
+      }
+      movedCount++;
+    }
+
+    res.json({ success: true, message: `${movedCount} item berhasil dipindahkan` });
+  } catch (err) {
+    res.status(400).json({ error: 'Gagal memindahkan item: ' + err.message });
+  }
+});
+
+// Download Selected Files/Folders as ZIP Archive
+app.post('/api/folders/:id/download-selected-zip', (req, res) => {
+  const folderId = req.params.id;
+  const { items } = req.body;
+  const folder = config.sharedFolders.find(f => f.id === folderId);
+
+  if (!folder) return res.status(404).send('Folder tidak ditemukan');
+  if (folder.requiresOtp && !req.session.verifiedFolders[folderId]) {
+    return res.status(401).send('OTP diperlukan');
+  }
+  if (!folder.allowDownload) {
+    return res.status(403).send('Unduh tidak diizinkan');
+  }
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).send('Tidak ada item yang dipilih');
+  }
+
+  try {
+    const zipName = `selected_files_${Date.now()}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(zipName)}"`);
+
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('error', err => res.status(500).send({ error: err.message }));
+    archive.pipe(res);
+
+    for (const itemSubpath of items) {
+      const targetPath = getSafePath(folder.path, itemSubpath);
+      if (!fs.existsSync(targetPath)) continue;
+
+      const stat = fs.statSync(targetPath);
+      const entryName = path.basename(targetPath);
+      if (stat.isDirectory()) {
+        archive.directory(targetPath, entryName);
+      } else {
+        archive.file(targetPath, { name: entryName });
+      }
+    }
+
+    archive.finalize();
+  } catch (err) {
+    res.status(400).send(err.message);
+  }
+});
+
+// Batch Delete Files/Folders
+app.post('/api/folders/:id/batch-delete', (req, res) => {
+  const folderId = req.params.id;
+  const { items } = req.body;
+  const folder = config.sharedFolders.find(f => f.id === folderId);
+
+  if (!folder) return res.status(404).json({ error: 'Folder tidak ditemukan' });
+  if (!folder.allowUpload) return res.status(403).json({ error: 'Penghapusan tidak diizinkan' });
+  if (folder.requiresOtp && !req.session.verifiedFolders[folderId]) {
+    return res.status(401).json({ error: 'OTP diperlukan' });
+  }
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Tidak ada item yang dipilih untuk dihapus' });
+  }
+
+  try {
+    let deletedCount = 0;
+    for (const itemSubpath of items) {
+      const targetPath = getSafePath(folder.path, itemSubpath);
+      if (!fs.existsSync(targetPath)) continue;
+
+      const stat = fs.statSync(targetPath);
+      if (stat.isDirectory()) {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+      } else {
+        try { fs.chmodSync(targetPath, 0o666); } catch (e) {}
+        fs.unlinkSync(targetPath);
+      }
+      deletedCount++;
+    }
+    res.json({ success: true, message: `${deletedCount} item berhasil dihapus` });
+  } catch (err) {
+    res.status(400).json({ error: 'Gagal menghapus: ' + err.message });
   }
 });
 

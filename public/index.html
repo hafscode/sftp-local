@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Windows File Explorer - ShareDrive Local LAN</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -53,16 +53,37 @@
   <!-- EXPLORER ACTION TOOLBAR -->
   <div class="explorer-toolbar">
     <div class="toolbar-left">
-      <button class="btn-icon toolbar-btn" id="btn-create-folder">📁 Folder Baru</button>
-      <button class="btn-icon toolbar-btn" id="btn-upload-file">📄 Upload File</button>
-      <button class="btn-icon toolbar-btn" id="btn-upload-folder">📂 Upload Folder</button>
-      <button class="btn-icon toolbar-btn" id="btn-download-zip" style="color: var(--win-success);">📦 Download ZIP</button>
+      <button class="btn-icon toolbar-btn" id="btn-create-folder" title="Buat Folder Baru">📁 Folder Baru</button>
+      <button class="btn-icon toolbar-btn" id="btn-upload-file" title="Upload File">📄 Upload File</button>
+
+      <span class="toolbar-divider"></span>
+
+      <button class="btn-icon toolbar-btn" id="btn-cut-selected" title="Potong Item Terpilih (Cut)" disabled>✂️ Cut</button>
+      <button class="btn-icon toolbar-btn" id="btn-copy-selected" title="Salin Item Terpilih (Copy)" disabled>📋 Copy</button>
+      <button class="btn-icon toolbar-btn" id="btn-paste" title="Tempel Item (Paste)" disabled>📥 Paste</button>
+      <button class="btn-icon toolbar-btn danger-icon" id="btn-delete-selected" title="Hapus Item Terpilih" disabled>🗑️ Delete</button>
+
+      <span class="toolbar-divider"></span>
+
+      <div class="action-dropdown-container">
+        <button class="btn-icon toolbar-btn" id="btn-toolbar-more" title="Opsi Lainnya" onclick="event.stopPropagation(); toggleToolbarMoreMenu();">⋮ More</button>
+        <div class="action-dropdown-menu" id="toolbar-more-menu">
+          <button class="dropdown-item" id="menu-download-selected">⬇️ Download Selected</button>
+          <button class="dropdown-item" id="menu-download-zip-selected" style="color: var(--win-success);">📦 Download ZIP Selected</button>
+          <button class="dropdown-item" id="menu-upload-folder">📂 Upload Folder</button>
+          <button class="dropdown-item" id="menu-download-zip">📦 Download ZIP Folder Ini</button>
+          <button class="dropdown-item" id="menu-copy-path">🔗 Copy Path</button>
+          <button class="dropdown-item" id="menu-select-all">☑️ Select All</button>
+          <button class="dropdown-item" id="menu-unselect-all">☐ Unselect All</button>
+        </div>
+      </div>
       
       <!-- Hidden file inputs -->
       <input type="file" id="file-input-files" multiple style="display: none;">
       <input type="file" id="file-input-folder" webkitdirectory directory multiple style="display: none;">
     </div>
     <div class="toolbar-right">
+      <span id="selected-count-badge" class="selected-count-badge" style="display: none;">0 dipilih</span>
       <span id="lan-ip-display" class="lan-ip-badge">IP LAN: Loading...</span>
     </div>
   </div>
@@ -106,6 +127,9 @@
         <table class="details-table">
           <thead>
             <tr>
+              <th class="col-checkbox" style="width: 36px; text-align: center;">
+                <input type="checkbox" id="select-all-checkbox" title="Pilih Semua" onclick="toggleSelectAll(this.checked)">
+              </th>
               <th onclick="handleSort('name')" class="col-name">
                 Nama <span id="sort-icon-name" class="sort-icon">🔽</span>
               </th>
@@ -174,7 +198,8 @@
         <!-- Dynamic uploading file items -->
       </div>
 
-      <div style="display: flex; justify-content: flex-end; margin-top: 1.25rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.25rem;">
+        <button class="btn-icon danger" id="btn-cancel-upload" style="background: var(--win-danger); color: #fff; display: none;" onclick="cancelUpload()">🚫 Batalkan Upload</button>
         <button class="btn-icon" onclick="closeModal('modal-upload-detail')">Tutup</button>
       </div>
     </div>
@@ -297,23 +322,73 @@
     </div>
   </div>
 
-  <!-- FILE PREVIEW MODAL WITH DOWNLOAD & SHARE BUTTONS -->
+  <!-- FILE PREVIEW MODAL -->
   <div class="modal-overlay" id="modal-preview">
     <div class="modal-card preview-card">
       <div class="modal-header">
         <h3 class="modal-title" id="preview-filename">Pratinjau File</h3>
-        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-          <button class="btn-icon" id="btn-modal-share" style="background: var(--win-card); border-color: var(--win-border);">
-            🔗 Bagikan
+        <div style="display: flex; gap: 0.35rem; align-items: center;">
+          <button class="btn-icon" id="btn-modal-download" title="Unduh File" style="background: var(--win-accent-dark); color: #fff; padding: 0.45rem 0.65rem;">
+            ⬇️
           </button>
-          <button class="btn-icon" id="btn-modal-download" style="background: var(--win-accent-dark); color: #fff;">
-            ⬇️ Unduh File
-          </button>
+          <div class="action-dropdown-container">
+            <button class="btn-icon" id="btn-modal-more" title="Opsi Lainnya" onclick="event.stopPropagation(); togglePreviewMoreMenu();">⋮ More</button>
+            <div class="action-dropdown-menu" id="preview-more-menu" style="right: 0; left: auto;">
+              <button class="dropdown-item" id="btn-modal-detail">ℹ️ Detail</button>
+              <button class="dropdown-item" id="btn-modal-rename">✏️ Edit (Rename)</button>
+              <button class="dropdown-item" id="btn-modal-cut">✂️ Cut</button>
+              <button class="dropdown-item" id="btn-modal-copy">📋 Copy</button>
+              <button class="dropdown-item" id="btn-modal-paste" style="display: none;">📥 Paste</button>
+              <button class="dropdown-item" id="btn-modal-share">🔗 Share</button>
+            </div>
+          </div>
           <button class="close-btn" onclick="closeModal('modal-preview')">&times;</button>
         </div>
       </div>
       <div class="preview-content" id="preview-container">
         <!-- Media content -->
+      </div>
+    </div>
+  </div>
+
+  <!-- FILE DETAIL INFORMATION MODAL -->
+  <div class="modal-overlay" id="modal-file-detail">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">ℹ️ Informasi Detail Berkas</h3>
+        <button class="close-btn" onclick="closeModal('modal-file-detail')">&times;</button>
+      </div>
+      <div style="font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.75rem;">
+        <div>
+          <span style="color: var(--win-text-muted); font-size: 0.75rem; display: block;">Nama Berkas:</span>
+          <span id="detail-file-name" style="font-weight: 600; word-break: break-all;">-</span>
+        </div>
+        <div>
+          <span style="color: var(--win-text-muted); font-size: 0.75rem; display: block; margin-bottom: 0.2rem;">Lokasi Subpath (Path):</span>
+          <div style="display: flex; gap: 0.4rem; align-items: center;">
+            <span id="detail-file-path" style="font-family: monospace; background: var(--win-bg); padding: 0.4rem 0.6rem; border-radius: 4px; word-break: break-all; color: var(--win-accent); flex: 1;">-</span>
+            <button class="btn-icon" id="btn-goto-folder" style="background: var(--win-card); border-color: var(--win-border); padding: 0.4rem 0.65rem; flex-shrink: 0;" title="Buka Folder Lokasi & Pilih Berkas Ini">
+              📂 Buka Lokasi
+            </button>
+          </div>
+        </div>
+        <div style="display: flex; gap: 1rem;">
+          <div style="flex: 1;">
+            <span style="color: var(--win-text-muted); font-size: 0.75rem; display: block;">Ukuran:</span>
+            <span id="detail-file-size" style="font-weight: 600;">-</span>
+          </div>
+          <div style="flex: 1;">
+            <span style="color: var(--win-text-muted); font-size: 0.75rem; display: block;">Tipe:</span>
+            <span id="detail-file-type" style="font-weight: 600;">-</span>
+          </div>
+        </div>
+        <div>
+          <span style="color: var(--win-text-muted); font-size: 0.75rem; display: block;">Tanggal Modifikasi:</span>
+          <span id="detail-file-mtime" style="font-weight: 600;">-</span>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: flex-end; margin-top: 1.25rem;">
+        <button class="btn-icon" onclick="closeModal('modal-file-detail')">Tutup</button>
       </div>
     </div>
   </div>

@@ -537,10 +537,10 @@ header {
   background: var(--win-surface);
   border: 1px solid var(--win-border);
   border-radius: var(--radius-md);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
   padding: 0.35rem;
-  z-index: 999;
-  min-width: 130px;
+  z-index: 999999 !important;
+  min-width: 145px;
   display: none;
   flex-direction: column;
   gap: 0.2rem;

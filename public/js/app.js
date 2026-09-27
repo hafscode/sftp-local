@@ -350,27 +350,34 @@ function setupEventListeners() {
   });
 }
 
-// Row & Toolbar Floating Overlay Menu Helpers
+// Row & Toolbar Floating Overlay Menu Helpers (Body Portal Pattern)
 function toggleRowMenu(btn) {
-  const menu = btn.nextElementSibling;
+  const menu = btn.nextElementSibling || btn.parentElement.querySelector('.action-dropdown-menu');
   if (!menu) return;
   const isAlreadyActive = menu.classList.contains('active');
   closeAllRowMenus();
 
   if (!isAlreadyActive) {
+    menu._parentContainer = menu.parentElement;
+    menu._parentNextSibling = menu.nextSibling;
+
+    document.body.appendChild(menu);
     menu.classList.add('active');
+
     const rect = btn.getBoundingClientRect();
     menu.style.position = 'fixed';
-    menu.style.zIndex = '99999';
+    menu.style.zIndex = '999999999';
 
-    const menuHeight = 220;
+    const menuHeight = menu.offsetHeight || 260;
+    const menuWidth = menu.offsetWidth || 160;
+
     if (rect.bottom + menuHeight > window.innerHeight - 10) {
       menu.style.top = `${Math.max(10, rect.top - menuHeight - 4)}px`;
     } else {
       menu.style.top = `${rect.bottom + 4}px`;
     }
 
-    if (rect.left + 160 > window.innerWidth) {
+    if (rect.right - menuWidth >= 8) {
       menu.style.left = 'auto';
       menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
     } else {
@@ -388,11 +395,16 @@ function toggleToolbarMoreMenu() {
   closeAllRowMenus();
 
   if (!isAlreadyActive) {
+    menu._parentContainer = menu.parentElement;
+    menu._parentNextSibling = menu.nextSibling;
+
+    document.body.appendChild(menu);
     menu.classList.add('active');
+
     const rect = btn.getBoundingClientRect();
     menu.style.position = 'fixed';
     menu.style.top = `${rect.bottom + 4}px`;
-    menu.style.zIndex = '99999';
+    menu.style.zIndex = '999999999';
 
     if (rect.left + 220 > window.innerWidth) {
       menu.style.left = 'auto';
@@ -412,11 +424,16 @@ function togglePreviewMoreMenu() {
   closeAllRowMenus();
 
   if (!isAlreadyActive) {
+    menu._parentContainer = menu.parentElement;
+    menu._parentNextSibling = menu.nextSibling;
+
+    document.body.appendChild(menu);
     menu.classList.add('active');
+
     const rect = btn.getBoundingClientRect();
     menu.style.position = 'fixed';
     menu.style.top = `${rect.bottom + 4}px`;
-    menu.style.zIndex = '99999';
+    menu.style.zIndex = '999999999';
 
     if (rect.left + 170 > window.innerWidth) {
       menu.style.left = 'auto';
@@ -431,6 +448,20 @@ function togglePreviewMoreMenu() {
 function closeAllRowMenus() {
   document.querySelectorAll('.action-dropdown-menu.active').forEach(menu => {
     menu.classList.remove('active');
+    if (menu._parentContainer) {
+      if (menu._parentNextSibling) {
+        menu._parentContainer.insertBefore(menu, menu._parentNextSibling);
+      } else {
+        menu._parentContainer.appendChild(menu);
+      }
+      menu._parentContainer = null;
+      menu._parentNextSibling = null;
+    }
+    menu.style.position = '';
+    menu.style.top = '';
+    menu.style.left = '';
+    menu.style.right = '';
+    menu.style.zIndex = '';
   });
 }
 

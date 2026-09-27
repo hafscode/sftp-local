@@ -4,6 +4,12 @@ let currentFoldersData = [];
 let currentItems = [];
 let currentSystemInfo = null;
 
+// Global Selection, Clipboard & Search State
+let isSearchMode = false;
+let selectedItems = new Set();
+let clipboard = null;
+let activeUploadXHR = null;
+
 // Navigation History Stack
 let navHistory = [];
 let historyIndex = -1;
@@ -14,21 +20,67 @@ let sortColumn = 'name'; // 'name', 'mtime', 'type', 'size'
 let sortDirection = 'asc'; // 'asc' or 'desc'
 
 // Search state
-let isSearchMode = false;
+// View mode state ('table' | 'grid')
+let currentViewMode = localStorage.getItem('explorer-view-mode') || 'table';
+if (currentViewMode !== 'table' && currentViewMode !== 'grid') {
+  currentViewMode = 'table';
+}
 
-// Selection & Clipboard state
-let selectedItems = new Set(); // Set of item subpaths
-let clipboard = null; // { action: 'cut'|'copy', folderId: string, items: [subpaths...] }
-let activeUploadXhr = null; // Reference to current upload XHR
-let currentPreviewItem = null; // Currently previewed file item object
+function setViewMode(mode) {
+  if (mode !== 'table' && mode !== 'grid') mode = 'table';
+  currentViewMode = mode;
+  localStorage.setItem('explorer-view-mode', mode);
+  updateViewModeMenuItems();
+  renderFileTable(currentItems);
+}
+
+function updateViewModeMenuItems() {
+  const btnTable = document.getElementById('menu-view-table');
+  const btnGrid = document.getElementById('menu-view-grid');
+  if (btnTable) {
+    btnTable.style.fontWeight = currentViewMode === 'table' ? '700' : '400';
+    btnTable.style.color = currentViewMode === 'table' ? 'var(--win-accent)' : 'var(--win-text)';
+  }
+  if (btnGrid) {
+    btnGrid.style.fontWeight = currentViewMode === 'grid' ? '700' : '400';
+    btnGrid.style.color = currentViewMode === 'grid' ? 'var(--win-accent)' : 'var(--win-text)';
+  }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   initSystemInfo();
   loadSharedFolders();
   setupEventListeners();
 });
 
+function initTheme() {
+  const savedTheme = localStorage.getItem('app-theme') || 'dark';
+  applyTheme(savedTheme);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.body.setAttribute('data-theme', theme);
+  localStorage.setItem('app-theme', theme);
+
+  const btnToggle = document.getElementById('btn-toggle-theme');
+  if (btnToggle) {
+    btnToggle.innerText = theme === 'light' ? '☀️ Light Mode' : '🌙 Dark Mode';
+  }
+}
+
 function setupEventListeners() {
+  // Theme Toggle Button
+  const btnToggleTheme = document.getElementById('btn-toggle-theme');
+  if (btnToggleTheme) {
+    btnToggleTheme.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      const nextTheme = current === 'light' ? 'dark' : 'light';
+      applyTheme(nextTheme);
+    });
+  }
+
   // Mobile Sidebar Toggle Handlers
   const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
   const btnCloseSidebar = document.getElementById('btn-close-sidebar');
@@ -166,6 +218,23 @@ function setupEventListeners() {
   if (btnDeleteSelected) btnDeleteSelected.addEventListener('click', executeBatchDelete);
 
   // Toolbar More Menu Item Buttons
+  const menuViewTable = document.getElementById('menu-view-table');
+  if (menuViewTable) {
+    menuViewTable.addEventListener('click', () => {
+      closeAllRowMenus();
+      setViewMode('table');
+    });
+  }
+
+  const menuViewGrid = document.getElementById('menu-view-grid');
+  if (menuViewGrid) {
+    menuViewGrid.addEventListener('click', () => {
+      closeAllRowMenus();
+      setViewMode('grid');
+    });
+  }
+  updateViewModeMenuItems();
+
   const menuDownloadSelected = document.getElementById('menu-download-selected');
   if (menuDownloadSelected) {
     menuDownloadSelected.addEventListener('click', () => {
@@ -378,6 +447,10 @@ async function initSystemInfo() {
     if (data.qrCodeUrl) {
       document.getElementById('qr-code-img').src = data.qrCodeUrl;
       document.getElementById('qr-url-text').innerText = data.localUrl;
+    }
+
+    if (data.theme && !localStorage.getItem('app-theme')) {
+      applyTheme(data.theme);
     }
   } catch (err) {
     console.error('Gagal mengambil data sistem:', err);
@@ -630,26 +703,41 @@ function renderBreadcrumb(rootName, subpath) {
   });
 }
 
-// Render File Table (Explorer Details View with Selection & Drag-and-Drop)
+// Render File Explorer Content (Table View & Grid View)
 function renderFileTable(items) {
+  const tableView = document.getElementById('file-table-view');
+  const gridView = document.getElementById('file-grid-body');
   const tbody = document.getElementById('file-table-body');
-  tbody.innerHTML = '';
-
   const selectAllCb = document.getElementById('select-all-checkbox');
+
+  if (tbody) tbody.innerHTML = '';
+  if (gridView) gridView.innerHTML = '';
+
+  if (currentViewMode === 'grid') {
+    if (tableView) tableView.style.display = 'none';
+    if (gridView) gridView.style.display = 'grid';
+  } else {
+    if (tableView) tableView.style.display = 'table';
+    if (gridView) gridView.style.display = 'none';
+  }
 
   if (!items || items.length === 0) {
     selectedItems.clear();
     updateToolbarSelectionState();
     if (selectAllCb) selectAllCb.checked = false;
 
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="6" style="text-align: center; padding: 3rem; color: var(--win-text-muted);">
-          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📭</div>
-          <p style="margin-bottom: 1rem;">${isSearchMode ? 'Tidak ada file/folder yang cocok dengan pencarian' : 'Folder ini kosong'}</p>
-          ${!isSearchMode ? `<button class="btn-icon" style="background: var(--win-accent-dark); color: #fff; padding: 0.55rem 1.25rem;" onclick="document.getElementById('file-input-files').click()">📄 Upload File Ke Sini</button>` : ''}
-        </td>
-      </tr>`;
+    const emptyContent = `
+      <div style="text-align: center; padding: 3rem; color: var(--win-text-muted);">
+        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📭</div>
+        <p style="margin-bottom: 1rem;">${isSearchMode ? 'Tidak ada file/folder yang cocok dengan pencarian' : 'Folder ini kosong'}</p>
+        ${!isSearchMode ? `<button class="btn-icon" style="background: var(--win-accent-dark); color: #fff; padding: 0.55rem 1.25rem;" onclick="document.getElementById('file-input-files').click()">📄 Upload File Ke Sini</button>` : ''}
+      </div>`;
+
+    if (currentViewMode === 'grid' && gridView) {
+      gridView.innerHTML = `<div style="grid-column: 1 / -1;">${emptyContent}</div>`;
+    } else if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="6">${emptyContent}</td></tr>`;
+    }
     return;
   }
 
@@ -680,6 +768,16 @@ function renderFileTable(items) {
     return 0;
   });
 
+  if (currentViewMode === 'grid' && gridView) {
+    renderFileGridView(sortedItems, gridView);
+  } else if (tbody) {
+    renderFileTableView(sortedItems, tbody);
+  }
+
+  updateToolbarSelectionState();
+}
+
+function renderFileTableView(sortedItems, tbody) {
   sortedItems.forEach(item => {
     const tr = document.createElement('tr');
     const itemSubpath = item.subpath ? item.subpath : (currentSubpath ? `${currentSubpath}/${item.name}` : item.name);
@@ -775,6 +873,9 @@ function renderFileTable(items) {
           ${item.isDirectory 
             ? `<button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}', true)">📂 Buka</button>` 
             : `<button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); previewFile('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}', '${item.extension}')">👁️ Lihat</button>`}
+          ${item.isDirectory 
+            ? `<button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); downloadZip('${escapeJsStr(itemSubpath)}')">📦 Unduh .ZIP</button>` 
+            : `<button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); downloadFile('${escapeJsStr(itemSubpath)}')">⬇️ Unduh Berkas</button>`}
           <button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); promptRename('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}')">✏️ Edit (Rename)</button>
           <button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); setCutItems(['${escapeJsStr(itemSubpath)}'])">✂️ Cut</button>
           <button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); setCopyItems(['${escapeJsStr(itemSubpath)}'])">📋 Copy</button>
@@ -803,8 +904,142 @@ function renderFileTable(items) {
 
     tbody.appendChild(tr);
   });
+}
 
-  updateToolbarSelectionState();
+function renderFileGridView(sortedItems, gridContainer) {
+  sortedItems.forEach(item => {
+    const card = document.createElement('div');
+    const itemSubpath = item.subpath ? item.subpath : (currentSubpath ? `${currentSubpath}/${item.name}` : item.name);
+    const isSelected = selectedItems.has(itemSubpath);
+    const isCut = clipboard && clipboard.action === 'cut' && clipboard.items.includes(itemSubpath);
+
+    card.className = 'grid-item-card';
+    if (isSelected) card.classList.add('selected-row');
+    if (isCut) card.classList.add('cut-item');
+
+    card.setAttribute('draggable', 'true');
+    card.dataset.subpath = itemSubpath;
+    card.dataset.isDirectory = item.isDirectory ? 'true' : 'false';
+
+    const ext = (item.extension || '').toLowerCase();
+    let thumbHtml = '';
+    if (item.isDirectory) {
+      thumbHtml = `<div class="grid-item-thumb"><span class="grid-item-emoji">📁</span></div>`;
+    } else if (['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.bmp', '.ico'].includes(ext)) {
+      const imgUrl = `/api/folders/${currentFolderId}/file?subpath=${encodeURIComponent(itemSubpath)}&preview=1`;
+      thumbHtml = `<div class="grid-item-thumb"><img src="${imgUrl}" alt="thumb" onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\\'grid-item-emoji\\'>🖼️</span>';" /></div>`;
+    } else if (['.mp4', '.webm', '.mkv', '.avi', '.mov', '.ogg', '.3gp'].includes(ext)) {
+      const videoUrl = `/api/folders/${currentFolderId}/file?subpath=${encodeURIComponent(itemSubpath)}`;
+      thumbHtml = `<div class="grid-item-thumb"><video src="${videoUrl}#t=0.1" preload="metadata" style="width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 1px solid var(--win-border); background: #000; pointer-events: none;" muted onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\\'grid-item-emoji\\'>🎬</span>';"></video></div>`;
+    } else {
+      const emojiIcon = getFileEmojiIcon(ext);
+      thumbHtml = `<div class="grid-item-thumb"><span class="grid-item-emoji">${emojiIcon}</span></div>`;
+    }
+
+    const actionBtns = `
+      <div class="action-dropdown-container grid-more-wrapper">
+        <button class="btn-icon btn-more" title="Opsi Lainnya" onclick="event.stopPropagation(); toggleRowMenu(this)">⋮</button>
+        <div class="action-dropdown-menu">
+          ${item.isDirectory 
+            ? `<button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); loadFolderContents('${currentFolderId}', '${escapeJsStr(itemSubpath)}', true)">📂 Buka</button>` 
+            : `<button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); previewFile('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}', '${item.extension}')">👁️ Lihat</button>`}
+          ${item.isDirectory 
+            ? `<button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); downloadZip('${escapeJsStr(itemSubpath)}')">📦 Unduh .ZIP</button>` 
+            : `<button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); downloadFile('${escapeJsStr(itemSubpath)}')">⬇️ Unduh Berkas</button>`}
+          <button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); promptRename('${escapeJsStr(itemSubpath)}', '${escapeJsStr(item.name)}')">✏️ Edit (Rename)</button>
+          <button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); setCutItems(['${escapeJsStr(itemSubpath)}'])">✂️ Cut</button>
+          <button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); setCopyItems(['${escapeJsStr(itemSubpath)}'])">📋 Copy</button>
+          ${item.isDirectory ? `<button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); executePaste('${escapeJsStr(itemSubpath)}')">📥 Paste Ke Folder Ini</button>` : ''}
+          <button class="dropdown-item" onclick="event.stopPropagation(); closeAllRowMenus(); shareLink('${escapeJsStr(itemSubpath)}', ${item.isDirectory ? 'true' : 'false'})">🔗 Share</button>
+          <button class="dropdown-item danger" onclick="event.stopPropagation(); closeAllRowMenus(); deleteItem('${escapeJsStr(itemSubpath)}')">🗑️ Hapus</button>
+        </div>
+      </div>
+    `;
+
+    card.innerHTML = `
+      <div class="grid-checkbox-wrapper">
+        <input type="checkbox" class="row-checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleRowSelection('${escapeJsStr(itemSubpath)}')">
+      </div>
+      ${actionBtns}
+      ${thumbHtml}
+      <div class="grid-item-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+    `;
+
+    card.addEventListener('dragstart', (e) => {
+      let dragList = [];
+      if (selectedItems.has(itemSubpath)) {
+        dragList = Array.from(selectedItems);
+      } else {
+        dragList = [itemSubpath];
+      }
+      e.dataTransfer.setData('application/json', JSON.stringify({ items: dragList }));
+      e.dataTransfer.setData('text/plain', dragList.join(','));
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    if (item.isDirectory) {
+      card.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        card.classList.add('drop-target-active');
+      });
+
+      card.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        card.classList.remove('drop-target-active');
+      });
+
+      card.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        card.classList.remove('drop-target-active');
+
+        try {
+          const rawData = e.dataTransfer.getData('application/json');
+          if (rawData) {
+            const parsed = JSON.parse(rawData);
+            if (parsed.items && Array.isArray(parsed.items)) {
+              await moveItemsToFolder(parsed.items, itemSubpath);
+            }
+          }
+        } catch (err) {
+          console.error('Drop error:', err);
+        }
+      });
+    }
+
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.grid-more-wrapper') || e.target.closest('.action-dropdown-container') || e.target.closest('button') || e.target.closest('input')) {
+        return;
+      }
+      toggleRowSelection(itemSubpath);
+    });
+
+    card.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.grid-more-wrapper') || e.target.closest('.action-dropdown-container') || e.target.closest('button') || e.target.closest('input')) {
+        return;
+      }
+      if (item.isDirectory) {
+        loadFolderContents(currentFolderId, itemSubpath, true);
+      } else {
+        previewFile(itemSubpath, item.name, item.extension, item);
+      }
+    });
+
+    gridContainer.appendChild(card);
+  });
+}
+
+function getFileEmojiIcon(ext) {
+  const lower = (ext || '').toLowerCase();
+  if (['.mp4', '.mkv', '.avi', '.mov', '.webm'].includes(lower)) return '🎬';
+  if (['.mp3', '.wav', '.ogg', '.flac'].includes(lower)) return '🎵';
+  if (lower === '.pdf') return '📄';
+  if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(lower)) return '📦';
+  if (['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'].includes(lower)) return '📝';
+  if (['.txt', '.json', '.js', '.css', '.html', '.md', '.py'].includes(lower)) return '💻';
+  return '📄';
 }
 
 // Table Row Selection & Toolbar State Management
@@ -1838,15 +2073,24 @@ function previewFile(subpath, filename, ext, rawItem = null) {
 function getFileIcon(item, itemSubpath = '') {
   if (item.isDirectory) return '📁';
   const ext = (item.extension || '').toLowerCase();
+  const subpath = itemSubpath || item.subpath || (currentSubpath ? `${currentSubpath}/${item.name}` : item.name);
+
   if (['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.bmp', '.ico'].includes(ext)) {
-    const subpath = itemSubpath || item.subpath || (currentSubpath ? `${currentSubpath}/${item.name}` : item.name);
     if (currentFolderId && subpath) {
       const imgUrl = `/api/folders/${currentFolderId}/file?subpath=${encodeURIComponent(subpath)}&preview=1`;
       return `<img src="${imgUrl}" class="file-thumb-icon" alt="thumb" onerror="this.onerror=null; this.parentElement.innerHTML='🖼️';" />`;
     }
     return '🖼️';
   }
-  if (['.mp4', '.mkv', '.avi', '.mov', '.webm'].includes(ext)) return '🎬';
+
+  if (['.mp4', '.webm', '.mkv', '.avi', '.mov', '.ogg', '.3gp'].includes(ext)) {
+    if (currentFolderId && subpath) {
+      const videoUrl = `/api/folders/${currentFolderId}/file?subpath=${encodeURIComponent(subpath)}`;
+      return `<video src="${videoUrl}#t=0.1" preload="metadata" class="file-thumb-icon" style="object-fit: cover; pointer-events: none;" muted onerror="this.onerror=null; this.parentElement.innerHTML='🎬';"></video>`;
+    }
+    return '🎬';
+  }
+
   if (['.mp3', '.wav', '.ogg', '.flac'].includes(ext)) return '🎵';
   if (ext === '.pdf') return '📄';
   if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext)) return '📦';
@@ -1887,6 +2131,25 @@ function closeModal(id) {
     el.classList.remove('active');
   }
 
+  // Stop & pause any active video/audio playback when modal is closed
+  if (el) {
+    el.querySelectorAll('video, audio').forEach(media => {
+      try {
+        media.pause();
+        media.currentTime = 0;
+        media.src = '';
+        media.load();
+      } catch (e) {}
+    });
+  }
+
+  if (id === 'modal-preview') {
+    const container = document.getElementById('modal-preview-body');
+    if (container) {
+      container.innerHTML = '';
+    }
+  }
+
   const baseFolderHash = `#folder=${encodeURIComponent(currentFolderId || '')}&subpath=${encodeURIComponent(currentSubpath || '')}`;
   history.replaceState({ folderId: currentFolderId, subpath: currentSubpath }, '', baseFolderHash);
 
@@ -1912,7 +2175,9 @@ function parseHashUrlAndNavigate() {
   if (folderId) {
     currentFolderId = folderId;
     currentSubpath = subpath;
+    updateSidebarActiveItem(folderId);
     loadFolderContents(folderId, subpath, false);
+    buildSidebarFolderTree(folderId);
 
     const folderHash = `#folder=${encodeURIComponent(folderId)}&subpath=${encodeURIComponent(subpath)}`;
     history.replaceState({ folderId, subpath }, '', folderHash);

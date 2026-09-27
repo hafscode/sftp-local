@@ -21,6 +21,7 @@
       <span class="app-title-text">File Explorer Intranet</span>
     </div>
     <div class="header-right-nav">
+      <button class="btn-icon" id="btn-toggle-theme" title="Ubah Tema Light/Dark Mode">🌙 Dark Mode</button>
       <button class="btn-icon" id="btn-show-qr" title="Hubungkan HP via QR Code">📱 HP Connect</button>
       <a href="/admin.html" class="btn-icon" style="text-decoration: none;" title="Admin Dashboard">⚙️ Admin</a>
     </div>
@@ -68,6 +69,9 @@
       <div class="action-dropdown-container">
         <button class="btn-icon toolbar-btn" id="btn-toolbar-more" title="Opsi Lainnya" onclick="event.stopPropagation(); toggleToolbarMoreMenu();">⋮ More</button>
         <div class="action-dropdown-menu" id="toolbar-more-menu">
+          <button class="dropdown-item" id="menu-view-table">📜 Tampilan Tabel (Table View)</button>
+          <button class="dropdown-item" id="menu-view-grid">🖼️ Tampilan Grid (Grid View)</button>
+          <hr style="border: none; border-top: 1px solid var(--win-border); margin: 0.25rem 0;">
           <button class="dropdown-item" id="menu-download-selected">⬇️ Download Selected</button>
           <button class="dropdown-item" id="menu-download-zip-selected" style="color: var(--win-success);">📦 Download ZIP Selected</button>
           <button class="dropdown-item" id="menu-upload-folder">📂 Upload Folder</button>
@@ -122,9 +126,9 @@
         <p style="color: var(--win-text-muted);">Struktur folder akan otomatis dipertahankan di server.</p>
       </div>
 
-      <!-- FILE DETAILS TABLE -->
+      <!-- FILE DETAILS TABLE & GRID VIEW -->
       <div class="table-container">
-        <table class="details-table">
+        <table class="details-table" id="file-table-view">
           <thead>
             <tr>
               <th class="col-checkbox" style="width: 36px; text-align: center;">
@@ -149,6 +153,10 @@
             <!-- Dynamic File Rows -->
           </tbody>
         </table>
+
+        <div class="file-grid-view" id="file-grid-body" style="display: none;">
+          <!-- Dynamic Grid Cards -->
+        </div>
       </div>
 
       <!-- BOTTOM STATUS BAR -->
@@ -253,7 +261,7 @@
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem;">
           <button type="button" class="btn-icon" onclick="closeModal('modal-otp')">Batal</button>
-          <button type="submit" class="btn-icon" style="background: var(--win-accent-dark);">Buka Akses</button>
+          <button type="submit" class="btn-icon" style="background: var(--win-accent-dark); color: #ffffff;">Buka Akses</button>
         </div>
       </form>
     </div>

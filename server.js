@@ -70,6 +70,11 @@ function getLocalIpAddresses() {
     }
   }
   addresses.sort((a, b) => {
+    const isA_target = a.address === '172.16.0.2';
+    const isB_target = b.address === '172.16.0.2';
+    if (isA_target && !isB_target) return -1;
+    if (!isA_target && isB_target) return 1;
+
     const isA_192 = a.address.startsWith('192.168.');
     const isB_192 = b.address.startsWith('192.168.');
     if (isA_192 && !isB_192) return -1;
@@ -257,7 +262,8 @@ const upload = multer({
 // System Info & Network QR Code
 app.get('/api/system-info', async (req, res) => {
   const ips = getLocalIpAddresses();
-  const primaryIp = ips.length > 0 ? ips[0].address : 'localhost';
+  const hasTargetIp = ips.some(i => i.address === '172.16.0.2');
+  const primaryIp = hasTargetIp ? '172.16.0.2' : (ips.length > 0 ? ips[0].address : '172.16.0.2');
   const localUrl = `http://${primaryIp}:${config.port}`;
   
   let qrCodeUrl = '';
@@ -273,7 +279,8 @@ app.get('/api/system-info', async (req, res) => {
     primaryIp: primaryIp,
     localUrl: localUrl,
     qrCodeUrl: qrCodeUrl,
-    enforceLocalOnly: config.enforceLocalOnly
+    enforceLocalOnly: config.enforceLocalOnly,
+    theme: config.theme || 'dark'
   });
 });
 
@@ -969,11 +976,106 @@ app.get('/api/admin/status', (req, res) => {
   });
 });
 
+// Get Disk Free & Total Space Helper
+function getDiskSpace(targetPath) {
+  try {
+    const rootPath = path.parse(targetPath).root || targetPath;
+    const stat = fs.statfsSync(rootPath);
+    const bsize = stat.bsize || 4096;
+    const total = stat.blocks * bsize;
+    const free = stat.bavail * bsize;
+    const used = total - free;
+    return { drive: rootPath, total, free, used };
+  } catch (err) {
+    return { drive: targetPath, total: 0, free: 0, used: 0 };
+  }
+}
+
+// Calculate Detailed Shared Folders Stats
+function calculateSharedFoldersStats() {
+  const stats = {
+    totalBytes: 0,
+    totalFiles: 0,
+    totalFolders: 0,
+    images: { count: 0, bytes: 0 },
+    documents: { count: 0, bytes: 0 },
+    applications: { count: 0, bytes: 0 },
+    others: { count: 0, bytes: 0 },
+    drives: []
+  };
+
+  const imgExts = new Set(['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.bmp', '.ico', '.tiff', '.heic', '.raw']);
+  const docExts = new Set(['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.pdf', '.txt', '.md', '.csv', '.json', '.xml', '.odt', '.ods', '.odp', '.rtf', '.log', '.epub']);
+  const appExts = new Set(['.exe', '.msi', '.apk', '.dmg', '.deb', '.rpm', '.bat', '.cmd', '.sh', '.ps1', '.app', '.bin', '.iso', '.zip', '.rar', '.7z', '.tar', '.gz', '.jar']);
+
+  const checkedDrives = new Set();
+
+  (config.sharedFolders || []).forEach(folder => {
+    if (!folder.path || !fs.existsSync(folder.path)) return;
+
+    const rootDrive = path.parse(folder.path).root || 'D:\\';
+    if (!checkedDrives.has(rootDrive)) {
+      checkedDrives.add(rootDrive);
+      stats.drives.push(getDiskSpace(rootDrive));
+    }
+
+    function walkDir(dirPath) {
+      try {
+        const items = fs.readdirSync(dirPath, { withFileTypes: true });
+        items.forEach(item => {
+          const itemPath = path.join(dirPath, item.name);
+          if (item.isDirectory()) {
+            stats.totalFolders++;
+            walkDir(itemPath);
+          } else if (item.isFile()) {
+            try {
+              const fileStat = fs.statSync(itemPath);
+              const size = fileStat.size || 0;
+              const ext = path.extname(item.name).toLowerCase();
+              stats.totalFiles++;
+              stats.totalBytes += size;
+
+              if (imgExts.has(ext)) {
+                stats.images.count++;
+                stats.images.bytes += size;
+              } else if (docExts.has(ext)) {
+                stats.documents.count++;
+                stats.documents.bytes += size;
+              } else if (appExts.has(ext)) {
+                stats.applications.count++;
+                stats.applications.bytes += size;
+              } else {
+                stats.others.count++;
+                stats.others.bytes += size;
+              }
+            } catch (e) {}
+          }
+        });
+      } catch (e) {}
+    }
+
+    walkDir(folder.path);
+  });
+
+  return stats;
+}
+
+// Get Admin Detailed System & Storage Statistics
+app.get('/api/admin/stats', requireAdmin, (req, res) => {
+  try {
+    const stats = calculateSharedFoldersStats();
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menghitung statistik: ' + err.message });
+  }
+});
+
 // Get Admin Config & Shared Folders
 app.get('/api/admin/config', requireAdmin, (req, res) => {
   res.json({
     adminPassword: config.adminPassword,
     enforceLocalOnly: config.enforceLocalOnly,
+    theme: config.theme || 'dark',
     port: config.port,
     sharedFolders: config.sharedFolders
   });
@@ -981,12 +1083,13 @@ app.get('/api/admin/config', requireAdmin, (req, res) => {
 
 // Update System Settings
 app.post('/api/admin/settings', requireAdmin, (req, res) => {
-  const { adminPassword, enforceLocalOnly } = req.body;
+  const { adminPassword, enforceLocalOnly, theme } = req.body;
   if (adminPassword) config.adminPassword = adminPassword;
   if (typeof enforceLocalOnly === 'boolean') config.enforceLocalOnly = enforceLocalOnly;
+  if (theme && ['dark', 'light'].includes(theme)) config.theme = theme;
   
   if (saveConfig(config)) {
-    res.json({ success: true, message: 'Pengaturan sistem berhasil diperbarui' });
+    res.json({ success: true, message: 'Pengaturan sistem berhasil diperbarui', theme: config.theme || 'dark' });
   } else {
     res.status(500).json({ error: 'Gagal menyimpan konfigurasi' });
   }

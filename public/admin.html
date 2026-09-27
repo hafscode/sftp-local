@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Admin Panel - ShareDrive Local LAN</title>
   <link rel="stylesheet" href="/css/style.css">
   <style>
@@ -13,8 +13,8 @@
       margin-top: 1.5rem;
     }
     .folder-card {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
+      background: var(--win-card);
+      border: 1px solid var(--win-border);
       border-radius: var(--radius-md);
       padding: 1.25rem;
       display: flex;
@@ -28,31 +28,63 @@
     }
     .badge {
       font-size: 0.7rem;
-      padding: 0.2rem 0.5rem;
+      padding: 0.2rem 0.55rem;
       border-radius: 4px;
       font-weight: 700;
     }
-    .badge-success { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
-    .badge-danger { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
-    .badge-warning { background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-success { background: rgba(16, 185, 129, 0.2); color: var(--win-success); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-danger { background: rgba(239, 68, 68, 0.2); color: var(--win-danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-warning { background: rgba(245, 158, 11, 0.2); color: var(--win-warning); border: 1px solid rgba(245, 158, 11, 0.3); }
+    
+    .lan-info-banner {
+      background: var(--win-card);
+      border: 1px solid var(--win-border);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin-top: 1rem;
+    }
+    .detail-table th, .detail-table td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--win-border);
+      text-align: left;
+    }
+    .detail-table th {
+      color: var(--win-text-muted);
+      font-weight: 600;
+      background: var(--win-hover);
+    }
   </style>
 </head>
-<body>
+<body class="admin-body">
 
   <header>
-    <a href="/" class="brand">
+    <a href="/" class="brand" style="display: flex; align-items: center; gap: 0.6rem; text-decoration: none; color: var(--win-text);">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
       </svg>
-      <span>Admin Dashboard - ShareDrive</span>
+      <span style="font-weight: 700; font-size: 1.1rem;">Admin Dashboard - ShareDrive</span>
     </a>
-    <div class="nav-links">
-      <a href="/" class="btn btn-secondary">🏠 Ke Halaman Utama</a>
-      <button class="btn btn-danger" id="btn-admin-logout" style="display: none;">Keluar Admin</button>
+    <div class="header-right-nav" style="display: flex; gap: 0.5rem; align-items: center;">
+      <button class="btn-icon" id="btn-toggle-theme" title="Ubah Tema Light/Dark Mode">
+        🌙 Dark Mode
+      </button>
+      <a href="/" class="btn-icon" style="text-decoration: none;">🏠 Ke Halaman Utama</a>
+      <button class="btn-icon danger" id="btn-admin-logout" style="display: none; background: var(--win-danger); color: #fff;">Keluar Admin</button>
     </div>
   </header>
 
-  <main>
+  <main style="padding: 1.5rem; max-width: 1300px; margin: 0 auto; width: 100%;">
 
     <!-- ADMIN LOGIN SECTION -->
     <div id="admin-login-section" style="max-width: 420px; margin: 3rem auto;">
@@ -60,8 +92,8 @@
         <div class="modal-header">
           <h3 class="modal-title">🔐 Auth Login Admin</h3>
         </div>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-          Masukkan kata sandi Administrator untuk mengelola folder dan proteksi OTP. (Default: <code>admin</code>)
+        <p style="font-size: 0.85rem; color: var(--win-text-muted); margin-bottom: 1rem;">
+          Masukkan kata sandi Administrator untuk mengelola folder, proteksi OTP, dan pengaturan server. (Default: <code>admin</code>)
         </p>
         <form id="form-admin-login">
           <div class="form-group">
@@ -69,7 +101,7 @@
             <input type="password" id="admin-pass" class="form-control" placeholder="Password Admin..." required autofocus>
           </div>
           <div style="margin-top: 1.5rem;">
-            <button type="submit" class="btn btn-success" style="width: 100%; justify-content: center;">Masuk Dashboard</button>
+            <button type="submit" class="btn-icon" style="width: 100%; justify-content: center; background: var(--win-accent-dark); color: #fff; padding: 0.65rem;">Masuk Dashboard</button>
           </div>
         </form>
       </div>
@@ -78,61 +110,189 @@
     <!-- ADMIN DASHBOARD CONTENT (HIDDEN BY DEFAULT UNTIL LOGIN) -->
     <div id="admin-dashboard-section" style="display: none;">
 
-      <!-- LAN SYSTEM INFO & QUICK STATS -->
+      <!-- LAN SYSTEM INFO & ACTION BANNER -->
       <div class="lan-info-banner">
         <div>
           <h3 style="margin-bottom: 0.25rem;">🖥️ Server LAN ShareDrive Ready</h3>
-          <p style="font-size: 0.85rem; color: var(--text-muted);" id="admin-lan-info">
-            Akses IP Komputer: ...
+          <p style="font-size: 0.85rem; color: var(--win-text-muted);" id="admin-lan-info">
+            Akses IP Komputer: Memuat...
           </p>
         </div>
-        <button class="btn btn-success" id="btn-add-folder-modal">
-          ➕ Tambah Folder Shared Baru
-        </button>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button class="btn-icon" id="btn-show-detail-stats" style="background: var(--win-card); border-color: var(--win-border);">
+            📊 Pop-Up Detail Rincian Storage
+          </button>
+          <button class="btn-icon" id="btn-add-folder-modal" style="background: var(--win-accent-dark); color: #fff;">
+            ➕ Tambah Folder Shared Baru
+          </button>
+        </div>
       </div>
 
-      <div class="admin-grid">
-
-        <!-- SHARED FOLDERS MANAGEMENT -->
-        <div style="grid-column: 1 / -1;">
-          <h2 style="margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between;">
-            <span>📁 Daftar Folder Lokal yang Di-Share</span>
-          </h2>
-          <div id="admin-folder-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem;">
-            <!-- Dynamic Folder Cards -->
+      <!-- SUMMARY STATS CARDS GRID -->
+      <div class="admin-stats-container">
+        <!-- HARDDISK STORAGE CARD -->
+        <div class="admin-stat-card" id="card-stat-storage" style="cursor: pointer;" onclick="openModal('modal-admin-stats-detail')">
+          <div class="admin-stat-header">
+            <span>💾 Sisa Storage Harddisk</span>
+            <span style="font-size: 0.75rem;">📊 Detail</span>
+          </div>
+          <div class="admin-stat-value" id="stat-disk-free">-</div>
+          <div class="admin-stat-sub" id="stat-disk-sub">Memuat ruang harddisk...</div>
+          <div class="stat-progress-bar">
+            <div class="stat-progress-fill" id="stat-disk-progress" style="width: 0%;"></div>
           </div>
         </div>
 
-        <!-- GLOBAL SYSTEM SETTINGS CARD -->
-        <div style="grid-column: 1 / -1; margin-top: 1rem;">
-          <div class="modal-card" style="max-width: 100%;">
-            <h3>⚙️ Pengaturan Keamanan Server</h3>
-            <form id="form-system-settings" style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
-              <div class="form-group">
-                <label for="set-admin-pass">Ubah Password Admin</label>
-                <input type="text" id="set-admin-pass" class="form-control" placeholder="Kata sandi baru...">
-              </div>
-
-              <div class="form-group">
-                <label>Pembatasan Akses Jaringan Lokal</label>
-                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-top: 0.5rem; font-size: 0.95rem;">
-                  <input type="checkbox" id="set-enforce-local" style="width: 18px; height: 18px;">
-                  Hanya Izinkan Akses Dari Wi-Fi / Intranet Lokal (Subnet IP Private)
-                </label>
-              </div>
-
-              <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end;">
-                <button type="submit" class="btn btn-success">Simpan Pengaturan</button>
-              </div>
-            </form>
+        <!-- TOTAL SHARED SIZE CARD -->
+        <div class="admin-stat-card">
+          <div class="admin-stat-header">
+            <span>📁 Total Berkas Shared</span>
+            <span>📦 Size</span>
           </div>
+          <div class="admin-stat-value" id="stat-total-size">-</div>
+          <div class="admin-stat-sub" id="stat-total-count">0 file</div>
         </div>
 
+        <!-- IMAGE FILES STAT CARD -->
+        <div class="admin-stat-card">
+          <div class="admin-stat-header">
+            <span>🖼️ File Gambar</span>
+            <span>Image</span>
+          </div>
+          <div class="admin-stat-value" id="stat-img-info">- / -</div>
+          <div class="admin-stat-sub" id="stat-img-sub">Format: Jumlah / Ukuran</div>
+        </div>
+
+        <!-- DOCUMENT FILES STAT CARD -->
+        <div class="admin-stat-card">
+          <div class="admin-stat-header">
+            <span>📝 File Dokumen</span>
+            <span>Document</span>
+          </div>
+          <div class="admin-stat-value" id="stat-doc-info">- / -</div>
+          <div class="admin-stat-sub" id="stat-doc-sub">Format: Jumlah / Ukuran</div>
+        </div>
+
+        <!-- APPLICATION FILES STAT CARD -->
+        <div class="admin-stat-card">
+          <div class="admin-stat-header">
+            <span>🚀 File Aplikasi</span>
+            <span>App / Zip</span>
+          </div>
+          <div class="admin-stat-value" id="stat-app-info">- / -</div>
+          <div class="admin-stat-sub" id="stat-app-sub">Format: Jumlah / Ukuran</div>
+        </div>
+      </div>
+
+      <!-- SHARED FOLDERS MANAGEMENT SECTION -->
+      <div style="margin-top: 1.5rem;">
+        <h3 style="margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between;">
+          <span>📁 Daftar Folder Lokal yang Di-Share</span>
+        </h3>
+        <div id="admin-folder-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.25rem;">
+          <!-- Dynamic Folder Cards -->
+        </div>
+      </div>
+
+      <!-- GLOBAL SYSTEM & THEME SETTINGS CARD -->
+      <div style="margin-top: 2rem;">
+        <div class="modal-card" style="max-width: 100%;">
+          <h3 style="margin-bottom: 1rem;">⚙️ Pengaturan Keamanan & Tampilan Server</h3>
+          <form id="form-system-settings" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+            
+            <div class="form-group">
+              <label for="set-admin-pass">Ubah Password Admin</label>
+              <input type="text" id="set-admin-pass" class="form-control" placeholder="Biarkan kosong jika tidak diubah...">
+            </div>
+
+            <div class="form-group">
+              <label for="set-app-theme">Mode Tampilan (Style Theme)</label>
+              <select id="set-app-theme" class="form-control">
+                <option value="dark">🌙 Dark Mode (Default Mode Gelap)</option>
+                <option value="light">☀️ Light Mode (Mode Terang)</option>
+              </select>
+            </div>
+
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label>Pembatasan Akses Jaringan Lokal</label>
+              <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-top: 0.5rem; font-size: 0.9rem;">
+                <input type="checkbox" id="set-enforce-local" style="width: 18px; height: 18px;">
+                Hanya Izinkan Akses Dari Wi-Fi / Intranet Lokal (Subnet IP Private)
+              </label>
+            </div>
+
+            <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end;">
+              <button type="submit" class="btn-icon" style="background: var(--win-accent-dark); color: #fff; padding: 0.6rem 1.5rem;">Simpan Pengaturan</button>
+            </div>
+          </form>
+        </div>
       </div>
 
     </div>
 
   </main>
+
+  <!-- DETAIL STORAGE & FILE TYPE POPUP MODAL WITH CIRCLE CHART & PROGRESS BAR -->
+  <div class="modal-overlay" id="modal-admin-stats-detail">
+    <div class="modal-card" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3 class="modal-title">📊 Detail Information Rincian Storage & Tipe Berkas</h3>
+        <button class="close-btn" onclick="closeModal('modal-admin-stats-detail')">&times;</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; align-items: center; margin-top: 0.5rem;">
+        
+        <!-- CIRCLE CHART (DONUT SVG) -->
+        <div>
+          <div class="donut-chart-wrapper" id="donut-chart-container">
+            <svg viewBox="0 0 100 100" width="170" height="170" id="svg-donut-chart">
+              <!-- SVG Donut Paths -->
+            </svg>
+            <div class="donut-chart-center">
+              <div class="main-val" id="donut-center-main">-</div>
+              <div class="sub-val" id="donut-center-sub">Total Storage</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LEGEND & DISK STORAGE PROGRESS BAR -->
+        <div>
+          <h4 style="font-size: 0.9rem; margin-bottom: 0.75rem;">💾 Status Harddisk Server</h4>
+          <div style="font-size: 0.82rem; margin-bottom: 0.35rem; color: var(--win-text-muted);" id="detail-disk-text">
+            Terpakai: - / Total: -
+          </div>
+          <div class="stat-progress-bar" style="height: 10px; margin-bottom: 1.25rem;">
+            <div class="stat-progress-fill warning" id="detail-disk-fill" style="width: 0%;"></div>
+          </div>
+
+          <div class="chart-legend" id="chart-legend-container">
+            <!-- Dynamic Legend Items -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- DETAILED BREAKDOWN TABLE -->
+      <h4 style="font-size: 0.95rem; margin-top: 1.5rem; margin-bottom: 0.5rem;">📁 Rincian Kategori Berkas Shared</h4>
+      <table class="detail-table">
+        <thead>
+          <tr>
+            <th>Kategori Berkas</th>
+            <th>Jumlah File</th>
+            <th>Ukuran Total</th>
+            <th>Persentase</th>
+          </tr>
+        </thead>
+        <tbody id="detail-breakdown-tbody">
+          <!-- Breakdown Rows -->
+        </tbody>
+      </table>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
+        <button class="btn-icon" onclick="closeModal('modal-admin-stats-detail')">Tutup</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ADD / EDIT FOLDER MODAL -->
   <div class="modal-overlay" id="modal-folder-editor">
@@ -153,9 +313,9 @@
           <label for="edit-folder-path">Path Folder Lokal di Server Komputer</label>
           <div style="display: flex; gap: 0.5rem;">
             <input type="text" id="edit-folder-path" class="form-control" placeholder="Contoh: D:\sftp-apps\uploads" required>
-            <button type="button" class="btn btn-secondary" id="btn-browse-sys">Browse</button>
+            <button type="button" class="btn-icon" id="btn-browse-sys">Browse</button>
           </div>
-          <small style="color: var(--text-muted);">Folder akan otomatis dibuat jika belum ada di direktori komputer.</small>
+          <small style="color: var(--win-text-muted);">Folder akan otomatis dibuat jika belum ada di direktori komputer.</small>
         </div>
 
         <div class="form-group" style="margin-top: 1rem;">
@@ -172,7 +332,7 @@
           </div>
         </div>
 
-        <div class="form-group" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <div class="form-group" style="margin-top: 1rem; border-top: 1px solid var(--win-border); padding-top: 1rem;">
           <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
             <input type="checkbox" id="edit-requires-otp" style="width: 16px; height: 16px;">
             <strong>Proteksi Folder Ini Dengan OTP / PIN</strong>
@@ -180,13 +340,13 @@
           <div id="otp-input-group" style="margin-top: 0.75rem; display: none;">
             <label for="edit-otp-code">Kode OTP / PIN Akses</label>
             <input type="text" id="edit-otp-code" class="form-control" placeholder="Masukkan PIN / Kode OTP (Contoh: 123456)">
-            <small style="color: var(--warning-color);">User wajib memasukkan PIN ini sebelum bisa melihat/mengunduh isi folder.</small>
+            <small style="color: var(--win-warning);">User wajib memasukkan PIN ini sebelum bisa melihat/mengunduh isi folder.</small>
           </div>
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem;">
-          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-folder-editor')">Batal</button>
-          <button type="submit" class="btn btn-success">Simpan Folder</button>
+          <button type="button" class="btn-icon" onclick="closeModal('modal-folder-editor')">Batal</button>
+          <button type="submit" class="btn-icon" style="background: var(--win-accent-dark); color: #fff;">Simpan Folder</button>
         </div>
       </form>
     </div>
@@ -199,15 +359,15 @@
         <h3 class="modal-title">🖥️ Jelajahi Folder Komputer Server</h3>
         <button class="close-btn" onclick="closeModal('modal-sys-browse')">&times;</button>
       </div>
-      <div style="margin-bottom: 0.75rem; font-size: 0.85rem; color: var(--text-muted);" id="sys-browse-path">
+      <div style="margin-bottom: 0.75rem; font-size: 0.85rem; color: var(--win-text-muted);" id="sys-browse-path">
         Path: D:\
       </div>
-      <div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.5rem;" id="sys-browse-list">
+      <div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--win-border); border-radius: var(--radius-sm); padding: 0.5rem;" id="sys-browse-list">
         <!-- Folders list -->
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
-        <button class="btn btn-secondary" id="btn-sys-browse-up">⬆️ Ke Parent Folder</button>
-        <button class="btn btn-success" id="btn-sys-browse-select">Pilih Folder Ini</button>
+        <button class="btn-icon" id="btn-sys-browse-up">⬆️ Ke Parent Folder</button>
+        <button class="btn-icon" id="btn-sys-browse-select" style="background: var(--win-accent-dark); color: #fff;">Pilih Folder Ini</button>
       </div>
     </div>
   </div>

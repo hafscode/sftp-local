@@ -516,14 +516,11 @@ app.get('/api/folders/:id/file', (req, res) => {
 
     if (isPreview) {
       res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(path.basename(filePath))}"`);
+      res.sendFile(filePath, { maxAge: '1d' });
     } else {
       res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(path.basename(filePath))}"`);
+      res.sendFile(filePath);
     }
-
-    const stream = fs.createReadStream(filePath);
-    stream.pipe(res);
-    res.on('close', () => { stream.destroy(); });
-    req.on('aborted', () => { stream.destroy(); });
   } catch (err) {
     res.status(400).send(err.message);
   }

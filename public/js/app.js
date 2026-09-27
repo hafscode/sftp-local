@@ -2223,7 +2223,7 @@ function openModal(id) {
   const el = document.getElementById(id);
   if (el) {
     document.querySelectorAll('.modal-overlay.active').forEach(m => {
-      if (m.id !== id) m.classList.remove('active');
+      if (m.id !== id) closeModal(m.id);
     });
 
     el.classList.add('active');
@@ -2243,20 +2243,21 @@ function closeModal(id) {
     el.classList.remove('active');
   }
 
-  // Stop & pause any active video/audio playback when modal is closed
+  // Stop & pause any active video/audio/iframe playback when modal is closed
   if (el) {
-    el.querySelectorAll('video, audio').forEach(media => {
+    el.querySelectorAll('video, audio, iframe').forEach(media => {
       try {
-        media.pause();
+        if (typeof media.pause === 'function') media.pause();
         media.currentTime = 0;
         media.src = '';
-        media.load();
+        media.removeAttribute('src');
+        if (typeof media.load === 'function') media.load();
       } catch (e) {}
     });
   }
 
   if (id === 'modal-preview') {
-    const container = document.getElementById('modal-preview-body');
+    const container = document.getElementById('preview-container');
     if (container) {
       container.innerHTML = '';
     }

@@ -106,7 +106,7 @@ function setupEventListeners() {
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
-        overlay.classList.remove('active');
+        closeModal(overlay.id);
       }
     });
   });
@@ -117,17 +117,24 @@ function setupEventListeners() {
     }
   });
 
+  // Handle ESC key to close active modal or sidebar
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const activeModal = document.querySelector('.modal-overlay.active');
+      if (activeModal) {
+        closeModal(activeModal.id);
+        return;
+      }
+      closeSidebar();
+    }
+  });
+
   // Handle Mobile Hardware Back Button / Browser Back Button via HTML5 PopState
   window.addEventListener('popstate', (e) => {
-    // 1. If any modal popup is active, close it first!
+    // 1. If any modal popup is active, close it properly via closeModal!
     const activeModal = document.querySelector('.modal-overlay.active');
     if (activeModal) {
-      activeModal.classList.remove('active');
-      if (window.location.hash.includes('modal=')) {
-        const cleanFolderHash = window.location.hash.split('&modal=')[0].split('#modal=')[0];
-        const targetHash = cleanFolderHash || `#folder=${encodeURIComponent(currentFolderId || '')}&subpath=${encodeURIComponent(currentSubpath || '')}`;
-        history.replaceState({ folderId: currentFolderId, subpath: currentSubpath }, '', targetHash);
-      }
+      closeModal(activeModal.id);
       return;
     }
 

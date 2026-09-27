@@ -70,15 +70,21 @@ function getLocalIpAddresses() {
     }
   }
   addresses.sort((a, b) => {
-    const isA_target = a.address === '172.16.0.2';
-    const isB_target = b.address === '172.16.0.2';
-    if (isA_target && !isB_target) return -1;
-    if (!isA_target && isB_target) return 1;
-
-    const isA_192 = a.address.startsWith('192.168.');
-    const isB_192 = b.address.startsWith('192.168.');
+    const isA_192 = a.address.startsWith('192.168.') || a.address.startsWith('192.');
+    const isB_192 = b.address.startsWith('192.168.') || b.address.startsWith('192.');
     if (isA_192 && !isB_192) return -1;
     if (!isA_192 && isB_192) return 1;
+
+    const isA_10 = a.address.startsWith('10.');
+    const isB_10 = b.address.startsWith('10.');
+    if (isA_10 && !isB_10) return -1;
+    if (!isA_10 && isB_10) return 1;
+
+    const isA_172 = a.address.startsWith('172.');
+    const isB_172 = b.address.startsWith('172.');
+    if (isA_172 && !isB_172) return 1;
+    if (!isA_172 && isB_172) return -1;
+
     return 0;
   });
   return addresses;
@@ -262,8 +268,7 @@ const upload = multer({
 // System Info & Network QR Code
 app.get('/api/system-info', async (req, res) => {
   const ips = getLocalIpAddresses();
-  const hasTargetIp = ips.some(i => i.address === '172.16.0.2');
-  const primaryIp = hasTargetIp ? '172.16.0.2' : (ips.length > 0 ? ips[0].address : '172.16.0.2');
+  const primaryIp = ips.length > 0 ? ips[0].address : '127.0.0.1';
   const localUrl = `http://${primaryIp}:${config.port}`;
   
   let qrCodeUrl = '';
